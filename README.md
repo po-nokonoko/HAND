@@ -7,7 +7,7 @@ This repo contains the firmware code for the HAND main board (esp32-s3-mini). Th
 - [HAND FPC board PCB files](https://github.com/Dennis40816/hand_fpc_pcb)
 - [HAND app (written in Flutter)](https://github.com/Dennis40816/hand_app)
 
-## Install Dependencys
+## [Install Dependencys]
 - PlatformIO automatically resolves and installs project dependencies when you build, debug, or test a project. If you want to install project dependencies manually, please use PlatformIO Core (CLI) and the pio pkg install command.
 
 ### Optional
