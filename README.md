@@ -22,12 +22,9 @@ This repo contains the firmware code for the HAND main board (esp32-s3-mini). Th
 ## Nanopb & ProtoBuf
 
 - For nanopb and c output, do:
-
+  - make sure you are in the root of project
+  - open platformio CLI
   ```bash
-  # make sure you are in the root of project
-
-  # open platformio CLI
-
   # generate by nanopb_generator.py
   python .pio\libdeps\hand_firmware\Nanopb\generator\nanopb_generator.py src\hand_modules\hand_data\proto\hand_data.proto
   ```
@@ -35,14 +32,12 @@ This repo contains the firmware code for the HAND main board (esp32-s3-mini). Th
 - For protobuf and python output, do
 
   - make sure you already install protoc and it's available cmd from your terminal
-
+  - make sure you are in the root of project
+  - make sure you have protobuf in python
+  - open platformio CLI
   ```bash
-  # make sure you are in the root of project
-
-  # open platformio CLI
-
-  # make sure you have protobuf in python
   pip install protobuf
+  # Or winget install protobuf
 
   # compile protobuf
   protoc -I=src/hand_modules/hand_data/proto --python_out=tools/tcp_server src/hand_modules/hand_data/proto/hand_data.proto
