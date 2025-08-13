@@ -26,7 +26,7 @@
 #include "driver/usb_serial_jtag.h"
 
 #ifndef HAND_DEFAULT_LOG_SERVER_IP
-#define HAND_DEFAULT_LOG_SERVER_IP "192.168.1.17"
+#define HAND_DEFAULT_LOG_SERVER_IP "172.20.10.2"
 #endif
 
 static const char* TAG = "HAND_COMMON";
@@ -151,7 +151,8 @@ static esp_err_t hand_i2c_bus_and_device_init(
 
   /* init CH101 group */
   ch_group_t* ch101_group_p = &(devs_handle_p->ch101_group);
-  ch_dev_t* ch101_devs_p = &(devs_handle_p->ch101_dev);
+  ch_dev_t* ch101_devs_p = &(devs_handle_p->ch101_dev); // Imcompatible pointer type
+  // ch_dev_t* ch101_devs_p = (devs_handle_p->ch101_dev);
   chbsp_board_init(ch101_group_p);
 
   /* show macros defined in app_version.h of lib CH101 */
@@ -278,23 +279,24 @@ static esp_err_t hand_i2c_bus_and_device_init(
 
       dev_config.mode = ch101_modes[dev_num];
 
-      if (dev_config.mode != CH_MODE_FREERUN)
-      {                                         // unless free-running
-        hand_global_ch101_triggered_dev_num++;  // will be triggered
+      if (dev_config.mode != CH_MODE_FREERUN) //Try to figure
+      {                                         
+        hand_global_ch101_triggered_dev_num++;  
       }
 
       /* Init config structure with values from app_config.h */
       dev_config.max_range = CHIRP_SENSOR_MAX_RANGE_MM;
       dev_config.static_range = CHIRP_SENSOR_STATIC_RANGE;
 
-      /* If sensor will be free-running, set internal sample interval */
+      /* Test: If first CH101 sensor in Tx is free-running, set internal sample interval */
+      /* Why the output of CH101 remians 0? */
       if (dev_config.mode == CH_MODE_FREERUN)
       {
         dev_config.sample_interval = HAND_MS_CH101_DEFAULT_MEASURE_PERIOD;
       }
       else
       {
-        dev_config.sample_interval = 0;
+        dev_config.sample_interval = 0; // Check the interval in NON-free-run mode
       }
 
       /* Set detection thresholds (CH201 only) */
