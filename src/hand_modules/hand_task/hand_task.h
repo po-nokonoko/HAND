@@ -42,9 +42,9 @@
 
 // CH101 related
 
-#define HAND_TASK_SS_CH101_COLLECT_DATA      (4096)
-#define HAND_TASK_SS_CH101_FROM_QUEUE_TO_PPB (4096)
-#define HAND_TASK_SS_CH101_SEND_DATA         (8192)
+#define HAND_TASK_SS_CH101_COLLECT_DATA      (8192) // Bump up the stack size for additional iq data 
+#define HAND_TASK_SS_CH101_FROM_QUEUE_TO_PPB (8192) // -->
+#define HAND_TASK_SS_CH101_SEND_DATA         (16384)
 
 /* Public struct */
 
