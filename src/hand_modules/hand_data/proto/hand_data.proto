@@ -52,13 +52,17 @@ enum HandChipInstance {
 enum HandDataType
 {
   UINT8 = 0;
-  UINT16 = 1;
-  INT32 = 2;
-  INT64 = 3;
-  FLOAT = 4;
-  DOUBLE = 5;
-  CH101_SIMPLE = 6;
+  UINT16 = 1; // need to add a type int16 for iq
+  INT16 = 2;
+  INT32 = 3;
+  INT64 = 4;
+  FLOAT = 5;
+  DOUBLE = 6;
+  CH101_SIMPLE = 7;  // only range/amp/simple data
+  CH101_IQ = 8;  // only iq data  
 }
+
+
 
 message HandDataMsg {
   HandChipInstance source = 1;
@@ -67,6 +71,7 @@ message HandDataMsg {
   optional int64 timestamp = 4;
   repeated int64 timestamps = 5;
   bytes data = 6;
+  bytes iq_data = 7; // --- new message for one I/Q sample pair ---
 }
 
 message HandConfigMsg
