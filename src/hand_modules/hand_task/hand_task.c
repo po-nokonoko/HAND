@@ -359,6 +359,10 @@ void hand_task_vl53l1x_send_data(void* arg)
   }
 }
 
+/* Simply size the buffer to the worst-case permitted for CH101 */
+
+
+
 static void _hand_ch101_handle_data_ready(ch_group_t* grp_ptr)
 {
   hand_chx01_group_data_element_t new_ch101_data;
@@ -412,11 +416,53 @@ static void _hand_ch101_handle_data_ready(ch_group_t* grp_ptr)
       /* TODO: get amp data  */
 
       /* TODO: get IQ data */
+      ch_iq_sample_t *iq_buffer = (ch_iq_sample_t *)&(new_ch101_data.iq[dev_num].iq_data);  
+  
+      // Queue a non-blocking I/Q read from sample 0 → num_samples
+      ch_get_iq_data(
+          dev_ptr,
+          iq_buffer,       // pointer into your per-sensor buffer
+          0,                        // start at the first pair
+          num_samples,                // number of I/Q pairs to read
+          CH_IO_MODE_NONBLOCK       // non-blocking mode
+      );
+      /*
+      for (int s = 0; s < num_samples; ++s) {
+        ESP_LOGI(TAG,
+           "Dev %u RAW IQ[%d] → Q=%6d  I=%6d",
+           dev_num,
+           s,
+           iq_buffer[s].q,
+           iq_buffer[s].i);
+      }
+      printf("\n"); 
+      */
+
     }
   }
-  ESP_LOGI(TAG, "%.3f, %.3f, %.3f, %.3f", new_ch101_data.data[0].range,
-           new_ch101_data.data[1].range, new_ch101_data.data[2].range,
-           new_ch101_data.data[3].range);
+
+  // Check encoding
+
+  ESP_LOGI(TAG, "range: %.3f, %.3f, %.3f, %.3f", new_ch101_data.data[0].range,
+    new_ch101_data.data[1].range, new_ch101_data.data[2].range,
+    new_ch101_data.data[3].range);
+  
+  ESP_LOGI(TAG, "amp: %d, %d, %d, %d", new_ch101_data.data[0].amp,
+    new_ch101_data.data[1].amp, new_ch101_data.data[2].amp,
+    new_ch101_data.data[3].amp);
+    
+  
+  for (int s = 0; s < num_samples; ++s) {
+    ESP_LOGI(TAG, "Dev RAW IQ → dev 1: Q=%6d  I=%6d, dev 2: Q=%6d  I=%6d, dev 3: Q=%6d  I=%6d, dev 4: Q=%6d  I=%6d",
+               new_ch101_data.iq[0].iq_data[s].q, new_ch101_data.iq[0].iq_data[s].i, 
+               new_ch101_data.iq[1].iq_data[s].q, new_ch101_data.iq[1].iq_data[s].i, 
+               new_ch101_data.iq[2].iq_data[s].q, new_ch101_data.iq[2].iq_data[s].i, 
+               new_ch101_data.iq[3].iq_data[s].q, new_ch101_data.iq[3].iq_data[s].i);
+  }  
+      
+
+  printf("\n");
+  
   /* push to queue */
   xQueueSend(hand_global_ch101_data_queue, &new_ch101_data,
              pdMS_TO_TICKS(HAND_MS_CH101_QUEUE_MAX_DELAY));
@@ -478,6 +524,11 @@ void hand_task_ch101_from_queue_to_ppb(void* __attribute__((unused)) arg)
             new_ch101_data.data[i].range;
         ppb_p->data[buf_index].data[i][ppb_p->current_index].sample_num =
             new_ch101_data.data[i].sample_num;
+        memcpy (
+            ppb_p->data[buf_index].iq[i][ppb_p->current_index].iq_data,
+            new_ch101_data.iq[i].iq_data,
+            sizeof(ch_iq_sample_t)*new_ch101_data.data[i].sample_num
+        );
       }
 
       /* increase current_index */
@@ -562,28 +613,62 @@ void hand_task_ch101_send_data(void* arg)
            .count = send_data_index},
           {.d_p = &(ppb_p->data[send_buffer_index].data[3][0]),
            .count = send_data_index}};
+      
+       /* I/Q args (pointer into each sensor’s iq_data[]) */
+      hand_ch101_iq_arg_t iq_args[HAND_DEV_MAX_NUM_CH101] = {
+          {.iq_p = &(ppb_p->data[send_buffer_index].iq[0][0]), 
+           .count = send_data_index},
+          {.iq_p = &(ppb_p->data[send_buffer_index].iq[1][0]), 
+           .count = send_data_index},
+          {.iq_p = &(ppb_p->data[send_buffer_index].iq[2][0]), 
+           .count = send_data_index},
+          {.iq_p = &(ppb_p->data[send_buffer_index].iq[3][0]), 
+           .count = send_data_index}};
 
-      HandDataMsg data_msgs[HAND_DEV_MAX_NUM_CH101];
+      HandDataMsg simple_data_msgs[HAND_DEV_MAX_NUM_CH101];
 
       /* TODO: should init */
 
-      /* assign same fields */
+      /* assign fields for simples */
       for (uint8_t i = 0; i < HAND_DEV_MAX_NUM_CH101; ++i)
       {
-        data_msgs[i].data_type = HandDataType_CH101_SIMPLE;
-        data_msgs[i].data_count = send_data_index;
-        data_msgs[i].has_timestamp = false;
-        data_msgs[i].timestamps.funcs.encode = hand_encode_timestamps_array;
-        data_msgs[i].timestamps.arg = &timestamps_arg;
-        data_msgs[i].data.funcs.encode = hand_encode_ch101_simple_data_array;
-        data_msgs[i].data.arg = &ch101_data_args[i];
-        data_msgs[i].source = HAND_MSG_SOURCE_CH101_BASE + i;
+        simple_data_msgs[i].data_count = send_data_index;
+        simple_data_msgs[i].has_timestamp = false;
+        simple_data_msgs[i].timestamps.funcs.encode = hand_encode_timestamps_array;
+        simple_data_msgs[i].timestamps.arg = &timestamps_arg;
+        simple_data_msgs[i].data_type = HandDataType_CH101_SIMPLE;
+        simple_data_msgs[i].data.funcs.encode = hand_encode_ch101_simple_data_array;
+        simple_data_msgs[i].data.arg = &ch101_data_args[i];
+        simple_data_msgs[i].source = HAND_MSG_SOURCE_CH101_BASE + i;
       }
+      
+      HandDataMsg iq_data_msgs[HAND_DEV_MAX_NUM_CH101];
+      /* Assign fieds dor iqs */
+      for (uint8_t i = 0; i < HAND_DEV_MAX_NUM_CH101; ++i)
+      {
+        iq_data_msgs[i].data_count = send_data_index;
+        iq_data_msgs[i].has_timestamp = false;      
+        iq_data_msgs[i].timestamps.funcs.encode = hand_encode_timestamps_array;      
+        iq_data_msgs[i].timestamps.arg = &timestamps_arg;      
+        iq_data_msgs[i].data_type = HandDataType_CH101_IQ;      
+        iq_data_msgs[i].iq_data.funcs.encode = hand_encode_ch101_iq_array;      
+        iq_data_msgs[i].iq_data.arg = &iq_args[i];      
+        iq_data_msgs[i].source = HAND_MSG_SOURCE_CH101_BASE + i;      
+      }
+
+      /* Rectify 2 msgs */
+      HandDataMsg data_msgs[2 * HAND_DEV_MAX_NUM_CH101];
+      for (uint8_t i = 0; i < HAND_DEV_MAX_NUM_CH101; ++i)
+      {
+        data_msgs[i] = simple_data_msgs[i];
+        data_msgs[HAND_DEV_MAX_NUM_CH101 + i] = iq_data_msgs[i];
+      }
+ 
 
       // create msg arg
       hand_active_data_msgs_arr_arg_t msg_arg = {
           .msgs_p = data_msgs,
-          .max_count = HAND_DEV_MAX_NUM_CH101,
+          .max_count = 2 * HAND_DEV_MAX_NUM_CH101,
           .active_indicator = &hand_global_ch101_active_dev_num,
           .indicator_type = HandDataType_UINT8};
 
