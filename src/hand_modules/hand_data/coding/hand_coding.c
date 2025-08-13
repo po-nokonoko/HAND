@@ -69,6 +69,27 @@ bool hand_encode_ch101_simple_data_array(pb_ostream_t *stream,
   return true;
 }
 
+// --- new: I/Q encoder ---
+bool hand_encode_ch101_iq_array(pb_ostream_t *stream,
+                                const pb_field_t *field,
+                                void *const *arg)
+{
+  hand_ch101_iq_arg_t *iq_arg = (hand_ch101_iq_arg_t *)(*arg);
+  for (int i = 0; i < iq_arg->count; ++i)
+  {
+    if (!pb_encode_tag_for_field(stream, field))
+    {
+      return false;
+    }
+    if (!pb_encode_string(stream, (uint8_t *)iq_arg->iq_p,
+                          iq_arg->count * sizeof(hand_chx01_iq_data_unit_t)))
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool hand_encode_data_msg_pointers_array(pb_ostream_t *stream,
                                          const pb_field_t *field,
                                          void *const *arg)

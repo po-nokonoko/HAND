@@ -63,6 +63,13 @@ typedef struct hand_ch101_simple_data_arg_t
   int count;
 } hand_ch101_simple_data_arg_t;
 
+// --- new: argument struct for I/Q encoder ---
+typedef struct hand_ch101_iq_arg_t 
+{
+  hand_chx01_iq_data_unit_t *iq_p;    // pointer to first I/Q sample pair
+  int count;               // number of I/Q pairs
+} hand_ch101_iq_arg_t;
+
 /* alias hand encode args */
 typedef hand_float_arr_arg_t hand_vl53l1x_data_arg_t;
 
@@ -81,6 +88,11 @@ bool hand_encode_timestamps_array(pb_ostream_t *stream, const pb_field_t *field,
 bool hand_encode_ch101_simple_data_array(pb_ostream_t *stream,
                                          const pb_field_t *field,
                                          void *const *arg);
+
+// --- new: prototype for I/Q encoder ---
+bool hand_encode_ch101_iq_array(pb_ostream_t *stream,
+                                 const pb_field_t *field,
+                                 void *const *arg);                                         
 
 /**
  * @brief
