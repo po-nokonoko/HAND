@@ -23,6 +23,7 @@
 
 #include "stdint.h"
 #include "hand_config.h"
+#include "soniclib.h"
 
 /* public define */
 
@@ -46,7 +47,7 @@
 #define HAND_MSG_BYTES_COUNT_FIELD_OFFSET (0)
 #define HAND_MSG_BYTES_COUNT_FIELD_LENGTH (1)
 #define HAND_MSG_BYTES_COUNT_VALUE_OFFSET \
-  (HAND_MSG_BYTES_COUNT_FIELD_OFFSET + HAND_MSG_BYTES_COUNT_FIELD_LENGTH)
+(HAND_MSG_BYTES_COUNT_FIELD_OFFSET + HAND_MSG_BYTES_COUNT_FIELD_LENGTH)
 // fixed32 is 4 bytes len
 #define HAND_MSG_BYTES_COUNT_VALUE_LENGTH      (4)
 #define HAND_MSG_BYTES_COUNT_PLACEHOLDER_VALUE (1)
@@ -75,11 +76,17 @@ typedef struct hand_chx01_simple_data_unit_t
   float range;
 } hand_chx01_simple_data_unit_t;
 
+// —— I/Q blob ——
+typedef struct {
+  ch_iq_sample_t iq_data[150]; 
+} hand_chx01_iq_data_unit_t;
+
 /* for queue */
 typedef struct hand_chx01_group_data_element_t
 {
   int64_t timestamp;
   hand_chx01_simple_data_unit_t data[HAND_DEV_MAX_NUM_CH101];
+  hand_chx01_iq_data_unit_t iq[HAND_DEV_MAX_NUM_CH101];
 } hand_chx01_group_data_element_t;
 
 /* for nanopb */
@@ -88,6 +95,8 @@ typedef struct hand_chx01_data_t
   int64_t timestamps[HAND_SIZE_PPB_CH101];
   hand_chx01_simple_data_unit_t data[HAND_DEV_MAX_NUM_CH101]
                                     [HAND_SIZE_PPB_CH101];
+  hand_chx01_iq_data_unit_t     iq[HAND_DEV_MAX_NUM_CH101]
+                                  [HAND_SIZE_PPB_CH101];                                  
 } hand_chx01_data_t;
 
 /* ping pong buffer struct (PPB) */
