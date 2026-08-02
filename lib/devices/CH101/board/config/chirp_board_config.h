@@ -58,6 +58,6 @@
 #define CHIRP_PIN_LED {CHIRP_OK_1, CHIRP_OK_2, CHIRP_OK_3, CHIRP_OK_4}
 
 /* Deactivate use of debug I2C interface */
-#define USE_STD_I2C_FOR_IQ (1)
+//#define USE_STD_I2C_FOR_IQ (1)
 
 #endif /* CHIRP_BOARD_CONFIG_H */

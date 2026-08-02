@@ -10,7 +10,7 @@
  */
 
 /*
- Copyright © 2019-2020, Chirp Microsystems.  All rights reserved.
+ Copyright ï¿½ 2019-2020, Chirp Microsystems.  All rights reserved.
 
  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED

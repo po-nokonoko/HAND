@@ -126,3 +126,13 @@ This repo contains the firmware code for the HAND main board (esp32-s3-mini). Th
 - PPB: Ping Pong Buffer
 - SS: Stack Size (for FreeRTOS task size)
 - HAND: Haptic Assitance Navigation Device
+
+## pkg_resources
+
+- 由於 `setuptools` 沒有裝好，所以 `pkg_resources` 找不到
+  - **ModuleNotFoundError**: No module named `pkg_resources`:
+  
+    ```powershell
+    py -m pip uninstall -y platformio                                  
+    py -m pip install -U platformio
+    ```

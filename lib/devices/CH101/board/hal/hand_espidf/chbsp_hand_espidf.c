@@ -34,6 +34,11 @@
 #include "rom/ets_sys.h"
 #include "freertos/FreeRTOS.h"
 
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include "freertos/semphr.h"
+#include "freertos/portmacro.h"
+
 /* other lib */
 #include "tca6408a.h"
 
@@ -75,6 +80,8 @@ static uint8_t decimation_factor;
 static void ext_int_init(void);
 static void find_sensors(void);
 static void i2c_master0_init() __attribute__((unused));
+
+
 
 /* =============== Functions ============== */
 
@@ -575,8 +582,8 @@ static void IRAM_ATTR chirp_isr_callback(void* ch_io_cb_para)
   gpio_num_t io_pin = chirp_pin_io[dev_num];
 
   /* TODO: v1, implement io pin logic here, see datasheet */
-  ioport_set_pin_level(io_pin, CHIRP_GPIO_LEVEL_LOW);
-  ioport_set_pin_dir(io_pin, GPIO_MODE_OUTPUT);
+  //ioport_set_pin_level(io_pin, CHIRP_GPIO_LEVEL_LOW);
+  //ioport_set_pin_dir(io_pin, GPIO_MODE_OUTPUT);
 
   if (para->grp_ptr->io_int_callback != NULL)
   {
@@ -635,7 +642,7 @@ void chbsp_board_init(ch_group_t* grp_ptr)
   grp_ptr->rtc_cal_pulse_ms = CHBSP_RTC_CAL_PULSE_MS;
 
   /* ESP-S3 init */
-  ESP_LOGI("chbsp_board_init", "Chbsp board init procedure starts!");
+  ESP_LOGI("chbsp_board_init", "Chbsp board init procedure starts!"); 
   ext_int_init();
   chbsp_i2c_init();
   find_sensors();
@@ -679,7 +686,7 @@ void chbsp_program_enable(ch_dev_t* dev_ptr)
 {
   uint8_t dev_num = ch_get_dev_num(dev_ptr);
 
-  if (dev_num > CHIRP_USE_NUM_SENSORS)
+  if (dev_num >= CHIRP_USE_NUM_SENSORS)
   {
     ESP_LOGE("chbsp_program_enable",
              "Dev number should not larger than %d. But now it's: %d. Abort!",
@@ -704,7 +711,7 @@ void chbsp_program_disable(ch_dev_t* dev_ptr)
 {
   uint8_t dev_num = ch_get_dev_num(dev_ptr);
 
-  if (dev_num > CHIRP_USE_NUM_SENSORS)
+  if (dev_num >= CHIRP_USE_NUM_SENSORS)
   {
     ESP_LOGE("chbsp_program_disable",
              "Dev number should not larger than %d. But now it's: %d. Abort!",
@@ -730,7 +737,7 @@ void chbsp_set_io_dir_out(ch_dev_t* dev_ptr)
 {
   uint8_t dev_num = ch_get_dev_num(dev_ptr);
 
-  if (dev_num > CHIRP_USE_NUM_SENSORS)
+  if (dev_num >= CHIRP_USE_NUM_SENSORS)
   {
     ESP_LOGE("chbsp_set_io_dir_out",
              "Dev number should not larger than %d. But now it's: %d. Abort!",
@@ -754,7 +761,7 @@ void chbsp_set_io_dir_in(ch_dev_t* dev_ptr)
 {
   uint8_t dev_num = ch_get_dev_num(dev_ptr);
 
-  if (dev_num > CHIRP_USE_NUM_SENSORS)
+  if (dev_num >= CHIRP_USE_NUM_SENSORS)
   {
     ESP_LOGE("chbsp_set_io_dir_in",
              "Dev number should not larger than %d. But now it's: %d. Abort!",
@@ -994,7 +1001,7 @@ void chbsp_io_interrupt_enable(ch_dev_t* dev_ptr)
 {
   uint8_t dev_num = ch_get_dev_num(dev_ptr);
 
-  if (dev_num > CHIRP_USE_NUM_SENSORS)
+  if (dev_num >= CHIRP_USE_NUM_SENSORS)
   {
     ESP_LOGE("chbsp_io_interrupt_enable",
              "Dev number should be no larger than %d. But now it's: %d. Abort!",
@@ -1047,7 +1054,7 @@ void chbsp_io_interrupt_disable(ch_dev_t* dev_ptr)
 {
   uint8_t dev_num = ch_get_dev_num(dev_ptr);
 
-  if (dev_num > CHIRP_USE_NUM_SENSORS)
+  if (dev_num >= CHIRP_USE_NUM_SENSORS)
   {
     ESP_LOGE("chbsp_io_interrupt_disable",
              "Dev number should be no larger than %d. But now it's: %d. Abort!",
@@ -1078,7 +1085,7 @@ void chbsp_io_clear(ch_dev_t* dev_ptr)
 {
   uint8_t dev_num = ch_get_dev_num(dev_ptr);
 
-  if (dev_num > CHIRP_USE_NUM_SENSORS)
+  if (dev_num >= CHIRP_USE_NUM_SENSORS)
   {
     ESP_LOGE("chbsp_io_clear",
              "Dev number should be no larger than %d. But now it's: %d. Abort!",
@@ -1108,7 +1115,7 @@ void chbsp_io_set(ch_dev_t* dev_ptr)
 {
   uint8_t dev_num = ch_get_dev_num(dev_ptr);
 
-  if (dev_num > CHIRP_USE_NUM_SENSORS)
+  if (dev_num >= CHIRP_USE_NUM_SENSORS)
   {
     ESP_LOGE("chbsp_io_set",
              "Dev number should be no larger than %d. But now it's: %d. Abort!",
@@ -1231,13 +1238,13 @@ uint8_t chbsp_i2c_get_info(ch_group_t __attribute__((unused)) * grp_ptr,
 {
   uint8_t ret_val = 1;
 
-  if (io_index <= CHBSP_MAX_DEVICES)
+  if (io_index < CHBSP_MAX_DEVICES)
   {
     info_ptr->address = chirp_i2c_addrs[io_index];
     info_ptr->bus_num = chirp_i2c_buses[io_index];
 
-    info_ptr->drv_flags =
-        0;  // no special I2C handling by SonicLib driver is needed
+    info_ptr->drv_flags = 0;
+        // 0; no special I2C handling by SonicLib driver is needed
 
     ret_val = 0;
   }
@@ -1514,7 +1521,9 @@ uint8_t chbsp_periodic_timer_init(uint16_t interval_ms,
                                   ch_timer_callback_t callback_func_ptr)
 {
   static bool is_hw_init_done = false;
-
+  decimation_factor  = 1;     // ← 新增：預設每次都觸發
+  decimation_counter = 0;
+  
   /* Save timer interval and callback function */
   periodic_timer_interval_us = interval_ms * 1000;
   periodic_timer_callback_ptr = callback_func_ptr;
@@ -1681,6 +1690,7 @@ void chbsp_periodic_timer_handler(void* __attribute__((unused)) para)
   ch_timer_callback_t func_ptr = periodic_timer_callback_ptr;
 
   decimation_counter++;
+  /* 但 decimation_factor 沒被設定成預設值（宣告全域未設值時為 0），這會讓 >= 0 永遠為真、每次都觸發 callback。 */
 
   if (decimation_counter >= decimation_factor)
   {

@@ -98,9 +98,9 @@
 /* 觀察得知，當所有都設定成 CH_MODE_TRIGGERED_TX_RX 似乎會干擾，一部分設定成
  * FREERUN 會好一點 */
 /* WARNING: 換成用 hand_config.h 配置模式 */
-#define CHIRP_FIRST_SENSOR_MODE CH_MODE_FREERUN
+// #define CHIRP_FIRST_SENSOR_MODE CH_MODE_FREERUN
 // Test the extent of interuption... 
-//#define CHIRP_FIRST_SENSOR_MODE CH_MODE_TRIGGERED_TX_RX
+#define CHIRP_FIRST_SENSOR_MODE CH_MODE_TRIGGERED_TX_RX
 #define CHIRP_OTHER_SENSOR_MODE CH_MODE_TRIGGERED_RX_ONLY
 
 /* Maximum detection range for the sensor
@@ -167,7 +167,7 @@
  *   following symbol to CH101_MAX_NUM_SAMPLES to use less memory.
  */
 
-#define DATA_MAX_NUM_SAMPLES CH201_MAX_NUM_SAMPLES  // use CH201 max
+#define DATA_MAX_NUM_SAMPLES CH101_MAX_NUM_SAMPLES  // use CH201 max
 
 /*===============  Build Options for Amplitude Data Handling =================*/
 
@@ -228,9 +228,9 @@
 
 #define READ_IQ_DATA			/* uncomment this line to readout I/Q
 // data */
-
-// #define READ_IQ_BLOCKING /* use blocking mode when reading I/Q */
-#define READ_IQ_NONBLOCKING 	/* use non-blocking mode when reading I/Q */
+ 
+// #define READ_IQ_NONBLOCKING 	/* use non-blocking mode when reading I/Q */
+#define READ_IQ_BLOCKING 	/* use blocking mode when reading I/Q */
 
 // #define OUTPUT_IQ_DATA_CSV	/* uncomment to output I/Q data in CSV format */
 
