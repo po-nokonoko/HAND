@@ -10,7 +10,7 @@ enum HandMsgDirection {
 enum HandMainMsgType {
   CONFIG = 0;
   DATA = 1;
-  CMD = 2;  // which requires target to perform operations
+  CMD = 2; // which requires target to perform operations
 
   // SYSTEM LOG uses pure string via UDP
 }
@@ -52,17 +52,16 @@ enum HandChipInstance {
 enum HandDataType
 {
   UINT8 = 0;
-  UINT16 = 1; // need to add a type int16 for iq
+  UINT16 = 1; 
   INT16 = 2;
   INT32 = 3;
   INT64 = 4;
   FLOAT = 5;
   DOUBLE = 6;
-  CH101_SIMPLE = 7;  // only range/amp/simple data
-  CH101_IQ = 8;  // only iq data  
+  CH101_SIMPLE = 7;
+  CH101_AMP = 8;
+  CH101_IQ = 9;  
 }
-
-
 
 message HandDataMsg {
   HandChipInstance source = 1;
@@ -71,9 +70,26 @@ message HandDataMsg {
   optional int64 timestamp = 4;
   repeated int64 timestamps = 5;
   bytes data = 6;
-  bytes iq_data = 7; // --- new message for one I/Q sample pair ---
 }
 
+message HandDataMsgSimple {
+  HandChipInstance source = 1;
+  HandDataType data_type = 2;
+  uint32 data_count = 3; // number of data elements, not byte length
+  bytes data = 4;
+}
+message HandDataMsgAmp {
+  HandChipInstance source = 1;
+  HandDataType data_type = 2;
+  uint32 data_count = 3;
+  bytes data = 4;
+}
+message HandDataMsgIq {
+  HandChipInstance source = 1;
+  HandDataType data_type = 2;
+  uint32 data_count = 3;
+  bytes data = 4;
+}
 message HandConfigMsg
 {
   repeated HandChipInstance target = 1;
@@ -89,6 +105,9 @@ message HandCmdMsg
 // Wrapper messages
 message HandDataWrapper {
   repeated HandDataMsg data_msgs = 1;
+  repeated HandDataMsgSimple data_msgs_simple = 2;
+  repeated HandDataMsgAmp data_msgs_amp = 3;
+  repeated HandDataMsgIq data_msgs_iq = 4;
 }
 
 message HandConfigWrapper {

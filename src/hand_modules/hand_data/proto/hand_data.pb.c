@@ -9,6 +9,15 @@
 PB_BIND(HandDataMsg, HandDataMsg, AUTO)
 
 
+PB_BIND(HandDataMsgSimple, HandDataMsgSimple, AUTO)
+
+
+PB_BIND(HandDataMsgAmp, HandDataMsgAmp, AUTO)
+
+
+PB_BIND(HandDataMsgIq, HandDataMsgIq, AUTO)
+
+
 PB_BIND(HandConfigMsg, HandConfigMsg, AUTO)
 
 

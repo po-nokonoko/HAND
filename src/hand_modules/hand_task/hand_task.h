@@ -42,9 +42,11 @@
 
 // CH101 related
 
-#define HAND_TASK_SS_CH101_COLLECT_DATA      (8192) // Bump up the stack size for additional iq data 
-#define HAND_TASK_SS_CH101_FROM_QUEUE_TO_PPB (8192) // -->
-#define HAND_TASK_SS_CH101_SEND_DATA         (16384)
+#define HAND_TASK_SS_CH101_COLLECT_DATA      (13000) // Bump up the stack size for additional iq data 
+#define HAND_TASK_SS_CH101_FROM_QUEUE_TO_PPB (13000) // -->
+#define HAND_TASK_SS_CH101_SEND_DATA         (26000)
+
+
 
 /* Public struct */
 
@@ -68,7 +70,7 @@ typedef struct hand_task_handle_t
   TaskHandle_t ch101_collect_data_handle;
   TaskHandle_t ch101_from_queue_to_ppb_handle;
   TaskHandle_t ch101_send_data_handle;
-
+  
   // Alive related
 
   TaskHandle_t alive_handle;

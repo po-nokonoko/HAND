@@ -57,14 +57,15 @@ typedef enum _HandChipInstance {
 /* how we parse HandDataMsg.data array */
 typedef enum _HandDataType {
     HandDataType_UINT8 = 0,
-    HandDataType_UINT16 = 1, /* need to add a type int16 for iq */
+    HandDataType_UINT16 = 1,
     HandDataType_INT16 = 2,
     HandDataType_INT32 = 3,
     HandDataType_INT64 = 4,
     HandDataType_FLOAT = 5,
     HandDataType_DOUBLE = 6,
-    HandDataType_CH101_SIMPLE = 7, /* only range/amp/simple data */
-    HandDataType_CH101_IQ = 8 /* only iq data */
+    HandDataType_CH101_SIMPLE = 7,
+    HandDataType_CH101_AMP = 8,
+    HandDataType_CH101_IQ = 9
 } HandDataType;
 
 /* Struct definitions */
@@ -76,8 +77,28 @@ typedef struct _HandDataMsg {
     int64_t timestamp;
     pb_callback_t timestamps;
     pb_callback_t data;
-    pb_callback_t iq_data; /* --- new message for one I/Q sample pair --- */
 } HandDataMsg;
+
+typedef struct _HandDataMsgSimple {
+    HandChipInstance source;
+    HandDataType data_type;
+    uint32_t data_count; /* number of data elements, not byte length */
+    pb_callback_t data;
+} HandDataMsgSimple;
+
+typedef struct _HandDataMsgAmp {
+    HandChipInstance source;
+    HandDataType data_type;
+    uint32_t data_count;
+    pb_callback_t data;
+} HandDataMsgAmp;
+
+typedef struct _HandDataMsgIq {
+    HandChipInstance source;
+    HandDataType data_type;
+    uint32_t data_count;
+    pb_callback_t data;
+} HandDataMsgIq;
 
 typedef struct _HandConfigMsg {
     pb_callback_t target;
@@ -92,6 +113,9 @@ typedef struct _HandCmdMsg {
 /* Wrapper messages */
 typedef struct _HandDataWrapper {
     pb_callback_t data_msgs;
+    pb_callback_t data_msgs_simple;
+    pb_callback_t data_msgs_amp;
+    pb_callback_t data_msgs_iq;
 } HandDataWrapper;
 
 typedef struct _HandConfigWrapper {
@@ -144,6 +168,15 @@ extern "C" {
 #define HandDataMsg_source_ENUMTYPE HandChipInstance
 #define HandDataMsg_data_type_ENUMTYPE HandDataType
 
+#define HandDataMsgSimple_source_ENUMTYPE HandChipInstance
+#define HandDataMsgSimple_data_type_ENUMTYPE HandDataType
+
+#define HandDataMsgAmp_source_ENUMTYPE HandChipInstance
+#define HandDataMsgAmp_data_type_ENUMTYPE HandDataType
+
+#define HandDataMsgIq_source_ENUMTYPE HandChipInstance
+#define HandDataMsgIq_data_type_ENUMTYPE HandDataType
+
 #define HandConfigMsg_target_ENUMTYPE HandChipInstance
 
 #define HandCmdMsg_target_ENUMTYPE HandChipInstance
@@ -157,17 +190,23 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define HandDataMsg_init_default                 {_HandChipInstance_MIN, _HandDataType_MIN, 0, false, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define HandDataMsg_init_default                 {_HandChipInstance_MIN, _HandDataType_MIN, 0, false, 0, {{NULL}, NULL}, {{NULL}, NULL}}
+#define HandDataMsgSimple_init_default           {_HandChipInstance_MIN, _HandDataType_MIN, 0, {{NULL}, NULL}}
+#define HandDataMsgAmp_init_default              {_HandChipInstance_MIN, _HandDataType_MIN, 0, {{NULL}, NULL}}
+#define HandDataMsgIq_init_default               {_HandChipInstance_MIN, _HandDataType_MIN, 0, {{NULL}, NULL}}
 #define HandConfigMsg_init_default               {{{NULL}, NULL}, {{NULL}, NULL}}
 #define HandCmdMsg_init_default                  {_HandChipInstance_MIN, {{NULL}, NULL}}
-#define HandDataWrapper_init_default             {{{NULL}, NULL}}
+#define HandDataWrapper_init_default             {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define HandConfigWrapper_init_default           {{{NULL}, NULL}}
 #define HandCmdWrapper_init_default              {{{NULL}, NULL}}
 #define HandMsg_init_default                     {0, _HandMsgDirection_MIN, _HandMainMsgType_MIN, _HandChipType_MIN, 0, {HandDataWrapper_init_default}}
-#define HandDataMsg_init_zero                    {_HandChipInstance_MIN, _HandDataType_MIN, 0, false, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define HandDataMsg_init_zero                    {_HandChipInstance_MIN, _HandDataType_MIN, 0, false, 0, {{NULL}, NULL}, {{NULL}, NULL}}
+#define HandDataMsgSimple_init_zero              {_HandChipInstance_MIN, _HandDataType_MIN, 0, {{NULL}, NULL}}
+#define HandDataMsgAmp_init_zero                 {_HandChipInstance_MIN, _HandDataType_MIN, 0, {{NULL}, NULL}}
+#define HandDataMsgIq_init_zero                  {_HandChipInstance_MIN, _HandDataType_MIN, 0, {{NULL}, NULL}}
 #define HandConfigMsg_init_zero                  {{{NULL}, NULL}, {{NULL}, NULL}}
 #define HandCmdMsg_init_zero                     {_HandChipInstance_MIN, {{NULL}, NULL}}
-#define HandDataWrapper_init_zero                {{{NULL}, NULL}}
+#define HandDataWrapper_init_zero                {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define HandConfigWrapper_init_zero              {{{NULL}, NULL}}
 #define HandCmdWrapper_init_zero                 {{{NULL}, NULL}}
 #define HandMsg_init_zero                        {0, _HandMsgDirection_MIN, _HandMainMsgType_MIN, _HandChipType_MIN, 0, {HandDataWrapper_init_zero}}
@@ -179,12 +218,26 @@ extern "C" {
 #define HandDataMsg_timestamp_tag                4
 #define HandDataMsg_timestamps_tag               5
 #define HandDataMsg_data_tag                     6
-#define HandDataMsg_iq_data_tag                  7
+#define HandDataMsgSimple_source_tag             1
+#define HandDataMsgSimple_data_type_tag          2
+#define HandDataMsgSimple_data_count_tag         3
+#define HandDataMsgSimple_data_tag               4
+#define HandDataMsgAmp_source_tag                1
+#define HandDataMsgAmp_data_type_tag             2
+#define HandDataMsgAmp_data_count_tag            3
+#define HandDataMsgAmp_data_tag                  4
+#define HandDataMsgIq_source_tag                 1
+#define HandDataMsgIq_data_type_tag              2
+#define HandDataMsgIq_data_count_tag             3
+#define HandDataMsgIq_data_tag                   4
 #define HandConfigMsg_target_tag                 1
 #define HandConfigMsg_config_tag                 2
 #define HandCmdMsg_target_tag                    1
 #define HandCmdMsg_cmd_tag                       2
 #define HandDataWrapper_data_msgs_tag            1
+#define HandDataWrapper_data_msgs_simple_tag     2
+#define HandDataWrapper_data_msgs_amp_tag        3
+#define HandDataWrapper_data_msgs_iq_tag         4
 #define HandConfigWrapper_config_msgs_tag        1
 #define HandCmdWrapper_cmd_msgs_tag              1
 #define HandMsg_bytes_count_tag                  1
@@ -202,10 +255,33 @@ X(a, STATIC,   SINGULAR, UENUM,    data_type,         2) \
 X(a, STATIC,   SINGULAR, UINT32,   data_count,        3) \
 X(a, STATIC,   OPTIONAL, INT64,    timestamp,         4) \
 X(a, CALLBACK, REPEATED, INT64,    timestamps,        5) \
-X(a, CALLBACK, SINGULAR, BYTES,    data,              6) \
-X(a, CALLBACK, SINGULAR, BYTES,    iq_data,           7)
+X(a, CALLBACK, SINGULAR, BYTES,    data,              6)
 #define HandDataMsg_CALLBACK pb_default_field_callback
 #define HandDataMsg_DEFAULT NULL
+
+#define HandDataMsgSimple_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    source,            1) \
+X(a, STATIC,   SINGULAR, UENUM,    data_type,         2) \
+X(a, STATIC,   SINGULAR, UINT32,   data_count,        3) \
+X(a, CALLBACK, SINGULAR, BYTES,    data,              4)
+#define HandDataMsgSimple_CALLBACK pb_default_field_callback
+#define HandDataMsgSimple_DEFAULT NULL
+
+#define HandDataMsgAmp_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    source,            1) \
+X(a, STATIC,   SINGULAR, UENUM,    data_type,         2) \
+X(a, STATIC,   SINGULAR, UINT32,   data_count,        3) \
+X(a, CALLBACK, SINGULAR, BYTES,    data,              4)
+#define HandDataMsgAmp_CALLBACK pb_default_field_callback
+#define HandDataMsgAmp_DEFAULT NULL
+
+#define HandDataMsgIq_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    source,            1) \
+X(a, STATIC,   SINGULAR, UENUM,    data_type,         2) \
+X(a, STATIC,   SINGULAR, UINT32,   data_count,        3) \
+X(a, CALLBACK, SINGULAR, BYTES,    data,              4)
+#define HandDataMsgIq_CALLBACK pb_default_field_callback
+#define HandDataMsgIq_DEFAULT NULL
 
 #define HandConfigMsg_FIELDLIST(X, a) \
 X(a, CALLBACK, REPEATED, UENUM,    target,            1) \
@@ -220,10 +296,16 @@ X(a, CALLBACK, SINGULAR, BYTES,    cmd,               2)
 #define HandCmdMsg_DEFAULT NULL
 
 #define HandDataWrapper_FIELDLIST(X, a) \
-X(a, CALLBACK, REPEATED, MESSAGE,  data_msgs,         1)
+X(a, CALLBACK, REPEATED, MESSAGE,  data_msgs,         1) \
+X(a, CALLBACK, REPEATED, MESSAGE,  data_msgs_simple,   2) \
+X(a, CALLBACK, REPEATED, MESSAGE,  data_msgs_amp,     3) \
+X(a, CALLBACK, REPEATED, MESSAGE,  data_msgs_iq,      4)
 #define HandDataWrapper_CALLBACK pb_default_field_callback
 #define HandDataWrapper_DEFAULT NULL
 #define HandDataWrapper_data_msgs_MSGTYPE HandDataMsg
+#define HandDataWrapper_data_msgs_simple_MSGTYPE HandDataMsgSimple
+#define HandDataWrapper_data_msgs_amp_MSGTYPE HandDataMsgAmp
+#define HandDataWrapper_data_msgs_iq_MSGTYPE HandDataMsgIq
 
 #define HandConfigWrapper_FIELDLIST(X, a) \
 X(a, CALLBACK, REPEATED, MESSAGE,  config_msgs,       1)
@@ -252,6 +334,9 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (content,cmd_wrapper,content.cmd_wrapper),   
 #define HandMsg_content_cmd_wrapper_MSGTYPE HandCmdWrapper
 
 extern const pb_msgdesc_t HandDataMsg_msg;
+extern const pb_msgdesc_t HandDataMsgSimple_msg;
+extern const pb_msgdesc_t HandDataMsgAmp_msg;
+extern const pb_msgdesc_t HandDataMsgIq_msg;
 extern const pb_msgdesc_t HandConfigMsg_msg;
 extern const pb_msgdesc_t HandCmdMsg_msg;
 extern const pb_msgdesc_t HandDataWrapper_msg;
@@ -261,6 +346,9 @@ extern const pb_msgdesc_t HandMsg_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define HandDataMsg_fields &HandDataMsg_msg
+#define HandDataMsgSimple_fields &HandDataMsgSimple_msg
+#define HandDataMsgAmp_fields &HandDataMsgAmp_msg
+#define HandDataMsgIq_fields &HandDataMsgIq_msg
 #define HandConfigMsg_fields &HandConfigMsg_msg
 #define HandCmdMsg_fields &HandCmdMsg_msg
 #define HandDataWrapper_fields &HandDataWrapper_msg
@@ -270,6 +358,9 @@ extern const pb_msgdesc_t HandMsg_msg;
 
 /* Maximum encoded size of messages (where known) */
 /* HandDataMsg_size depends on runtime parameters */
+/* HandDataMsgSimple_size depends on runtime parameters */
+/* HandDataMsgAmp_size depends on runtime parameters */
+/* HandDataMsgIq_size depends on runtime parameters */
 /* HandConfigMsg_size depends on runtime parameters */
 /* HandCmdMsg_size depends on runtime parameters */
 /* HandDataWrapper_size depends on runtime parameters */

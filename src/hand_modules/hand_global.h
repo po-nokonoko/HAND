@@ -43,7 +43,7 @@ extern hand_task_handle_t hand_global_task_handle;
 
 extern volatile uint8_t hand_global_ch101_active_dev_num;
 extern volatile uint8_t hand_global_ch101_triggered_dev_num;
-extern volatile uint8_t hand_global_ch101_connected_dev_num;
+
 
 /* Ping pong buffer related */
 
@@ -54,8 +54,14 @@ extern volatile hand_ppb_vl53l1x_data_t hand_global_vl53l1x_ping_pong_buffer;
 
 // CH101 related
 
-extern volatile SemaphoreHandle_t hand_global_ch101_ping_pong_mutex;
-extern volatile hand_ppb_ch101_data_t hand_global_ch101_ping_pong_buffer;
+extern volatile SemaphoreHandle_t hand_global_ch101_simple_ping_pong_mutex;
+extern volatile hand_ppb_ch101_simple_data_t hand_global_ch101_simple_ping_pong_buffer;
+
+extern volatile SemaphoreHandle_t hand_global_ch101_amp_ping_pong_mutex;
+extern volatile hand_ppb_ch101_amp_data_t hand_global_ch101_amp_ping_pong_buffer;
+
+extern volatile SemaphoreHandle_t hand_global_ch101_iq_ping_pong_mutex;
+extern volatile hand_ppb_ch101_iq_data_t hand_global_ch101_iq_ping_pong_buffer;
 
 /* Queue related */
 
@@ -65,7 +71,12 @@ extern volatile QueueHandle_t hand_global_vl53l1x_data_queue;
 
 // CH101 related
 
-extern volatile QueueHandle_t hand_global_ch101_data_queue;
+extern volatile QueueHandle_t hand_global_ch101_simple_data_queue;
+
+extern volatile QueueHandle_t hand_global_ch101_amp_data_queue;
+
+extern volatile QueueHandle_t hand_global_ch101_iq_data_queue;
+
 
 /* Event group (EG) related */
 
@@ -84,10 +95,11 @@ extern volatile EventGroupHandle_t hand_global_vl53l1x_event_group;
 #define HAND_EG_CH101_2_DATA_READY_BIT              (1 << 1)
 #define HAND_EG_CH101_3_DATA_READY_BIT              (1 << 2)
 #define HAND_EG_CH101_4_DATA_READY_BIT              (1 << 3)
-#define HAND_EG_CH101_ALL_ACTIVE_DEV_DATA_READY_BIT (1 << 4)
-#define HAND_EG_CH101_IQ_DATA_READY                 (1 << 5)
+#define HAND_EG_CH101_ALL_ACTIVE_DEV_DATA_READY_BIT (1 << 4) 
+
 
 extern volatile EventGroupHandle_t hand_global_ch101_event_group;
+
 
 // HAND system related
 
@@ -131,3 +143,5 @@ void IRAM_ATTR hand_cb_ch101_sensed(ch_group_t* grp_ptr, uint8_t dev_num);
 void IRAM_ATTR hand_cb_ch101_io_completed(ch_group_t* grp_ptr);
 
 void IRAM_ATTR hand_cb_ch101_periodic_timer(void);
+
+

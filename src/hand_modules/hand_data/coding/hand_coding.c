@@ -1,5 +1,6 @@
 #include "hand_coding.h"
 #include "hand_data/hand_data.h"
+#include "hand_data/proto/hand_data.pb.h"
 
 #include "esp_log.h"
 
@@ -54,41 +55,79 @@ bool hand_encode_ch101_simple_data_array(pb_ostream_t *stream,
                                          void *const *arg)
 {
   hand_ch101_simple_data_arg_t *_arg = (hand_ch101_simple_data_arg_t *)(*arg);
-  for (int i = 0; i < _arg->count; ++i)
+  
+  if (!pb_encode_tag_for_field(stream, field))
   {
-    if (!pb_encode_tag_for_field(stream, field))
-    {
-      return false;
-    }
-    if (!pb_encode_string(stream, (uint8_t *)_arg->d_p,
-                          _arg->count * sizeof(hand_chx01_simple_data_unit_t)))
-    {
-      return false;
-    }
+    return false;
   }
+  if (!pb_encode_string(stream, (uint8_t *)_arg->simple_p,
+                        _arg->count * sizeof(hand_chx01_simple_data_unit_t)))
+  {
+    return false;
+  }
+  /* 
+  for (int i = 0; i < _arg->count; i++)
+  {
+  }
+  */
+  
   return true;
 }
 
-// --- new: I/Q encoder ---
-bool hand_encode_ch101_iq_array(pb_ostream_t *stream,
-                                const pb_field_t *field,
-                                void *const *arg)
+bool hand_encode_ch101_amp_data_array(pb_ostream_t *stream,
+                                      const pb_field_t *field,
+                                      void *const *arg)
 {
-  hand_ch101_iq_arg_t *iq_arg = (hand_ch101_iq_arg_t *)(*arg);
-  for (int i = 0; i < iq_arg->count; ++i)
+  hand_ch101_amp_data_arg_t *_arg =
+      (hand_ch101_amp_data_arg_t *)(*arg);
+  
+  if (!pb_encode_tag_for_field(stream, field))
   {
-    if (!pb_encode_tag_for_field(stream, field))
-    {
-      return false;
-    }
-    if (!pb_encode_string(stream, (uint8_t *)iq_arg->iq_p,
-                          iq_arg->count * sizeof(hand_chx01_iq_data_unit_t)))
-    {
-      return false;
-    }
+    return false;
   }
+
+  if (!pb_encode_string(stream,
+                        (uint8_t *)_arg->amp_p,
+                        _arg->count * sizeof(hand_chx01_amp_data_unit_t)))
+  {
+    return false;
+  }
+  
+  /*
+  for (int i = 0; i < _arg->count; i++)
+  {
+  }
+  */
   return true;
 }
+
+bool hand_encode_ch101_iq_data_array(pb_ostream_t *stream,
+                                      const pb_field_t *field,
+                                      void *const *arg)
+{
+  hand_ch101_iq_data_arg_t *_arg =
+      (hand_ch101_iq_data_arg_t *)(*arg);
+  
+  if (!pb_encode_tag_for_field(stream, field))
+  {
+    return false;
+  }
+
+  if (!pb_encode_string(stream,
+                        (uint8_t *)_arg->iq_p,
+                        _arg->count * sizeof(hand_chx01_iq_data_unit_t)))
+  {
+    return false;
+  }
+
+  /*
+  for (int i = 0; i < _arg->count; i++)
+  {
+  }
+  */
+  return true;
+}
+
 
 bool hand_encode_data_msg_pointers_array(pb_ostream_t *stream,
                                          const pb_field_t *field,
@@ -123,12 +162,12 @@ bool hand_encode_data_msg_pointers_array(pb_ostream_t *stream,
   return true;
 }
 
-bool hand_encode_active_data_msg_pointers_array(pb_ostream_t *stream,
+bool hand_encode_active_simple_data_msg_pointers_array(pb_ostream_t *stream,
                                                 const pb_field_t *field,
                                                 void *const *arg)
 {
-  hand_active_data_msgs_arr_arg_t *_arg =
-      (hand_active_data_msgs_arr_arg_t *)(*arg);
+  hand_active_simple_data_msgs_arr_arg_t *_arg =
+      (hand_active_simple_data_msgs_arr_arg_t *)(*arg);
 
   /* change to correct format */
   uint32_t _tmp = 0;
@@ -140,20 +179,94 @@ bool hand_encode_active_data_msg_pointers_array(pb_ostream_t *stream,
     case HandDataType_UINT16:
       _tmp = *((uint16_t *)_arg->active_indicator);
       break;
+
     default:
       ESP_LOGE(TAG, "Not Implemeted!");
   }
-
+  
   for (int i = 0; i < _arg->max_count; ++i)
   {
     if ((1 << i) & _tmp)
     {
       /* encode procedure */
       if (!pb_encode_tag_for_field(stream, field)) return false;
-      if (!pb_encode_submessage(stream, HandDataMsg_fields, &(_arg->msgs_p[i])))
+      if (!pb_encode_submessage(stream, HandDataMsgSimple_fields, &(_arg->msgs_p[i])))
         return false;
     }
   }
+
+  return true;
+}
+
+bool hand_encode_active_amp_data_msg_pointers_array(pb_ostream_t *stream,
+                                                const pb_field_t *field,
+                                                void *const *arg)
+{
+  hand_active_amp_data_msgs_arr_arg_t *_arg =
+      (hand_active_amp_data_msgs_arr_arg_t *)(*arg);
+
+  /* change to correct format */
+  uint32_t _tmp = 0;
+  switch (_arg->indicator_type)
+  {
+    case HandDataType_UINT8:
+      _tmp = *((uint8_t *)_arg->active_indicator);
+      break;
+    case HandDataType_UINT16:
+      _tmp = *((uint16_t *)_arg->active_indicator);
+      break;
+
+    default:
+      ESP_LOGE(TAG, "Not Implemeted!");
+  }
+  
+  for (int i = 0; i < _arg->max_count; ++i)
+  {
+    if ((1 << i) & _tmp)
+    {
+      /* encode procedure */
+      if (!pb_encode_tag_for_field(stream, field)) return false;
+      if (!pb_encode_submessage(stream, HandDataMsgAmp_fields, &(_arg->msgs_p[i])))
+        return false;
+    }
+  }
+
+  return true;
+}
+
+bool hand_encode_active_iq_data_msg_pointers_array(pb_ostream_t *stream,
+                                                const pb_field_t *field,
+                                                void *const *arg)
+{
+  hand_active_iq_data_msgs_arr_arg_t *_arg =
+      (hand_active_iq_data_msgs_arr_arg_t *)(*arg);
+
+  /* change to correct format */
+  uint32_t _tmp = 0;
+  switch (_arg->indicator_type)
+  {
+    case HandDataType_UINT8:
+      _tmp = *((uint8_t *)_arg->active_indicator);
+      break;
+    case HandDataType_UINT16:
+      _tmp = *((uint16_t *)_arg->active_indicator);
+      break;
+
+    default:
+      ESP_LOGE(TAG, "Not Implemeted!");
+  }
+  
+  for (int i = 0; i < _arg->max_count; ++i)
+  {
+    if ((1 << i) & _tmp)
+    {
+      /* encode procedure */
+      if (!pb_encode_tag_for_field(stream, field)) return false;
+      if (!pb_encode_submessage(stream, HandDataMsgIq_fields, &(_arg->msgs_p[i])))
+        return false;
+    }
+  }
+
   return true;
 }
 

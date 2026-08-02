@@ -34,8 +34,6 @@
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 
 /* devices related */
 #include "bos1901.h"
@@ -47,6 +45,7 @@
 #include "led_strip.h"
 
 /* Public struct */
+
 
 /**
  * @brief The control handles of all devices in the HAND system are stored in a
@@ -102,3 +101,6 @@ typedef struct hand_devices_handle_t
 
 /* Public API */
 esp_err_t hand_init(const char* ssid, const char* password, bool init_dev);
+
+
+

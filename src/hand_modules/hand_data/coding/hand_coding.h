@@ -32,8 +32,8 @@
 /* public struct */
 typedef struct hand_float_arr_arg_t
 {
-  float *fp; /* Pointer to the float array. */
-  int count; /* Number of float data elements in the array. */
+  float *fp; // Pointer to the float array.
+  int count; 
 } hand_float_arr_arg_t;
 
 typedef struct hand_timestamps_arr_arg_t
@@ -49,26 +49,47 @@ typedef struct hand_data_msgs_arr_arg_t
 } hand_data_msgs_arr_arg_t;
 
 /* see hand_encode_active_data_msg_array */
-typedef struct hand_active_data_msgs_arr_arg_t
+typedef struct hand_active_simple_data_msgs_arr_arg_t
 {
-  HandDataMsg *msgs_p;
+  HandDataMsgSimple *msgs_p;
   int max_count;
   void *active_indicator;
   HandDataType indicator_type;
-} hand_active_data_msgs_arr_arg_t;
+} hand_active_simple_data_msgs_arr_arg_t;
+typedef struct hand_active_amp_data_msgs_arr_arg_t
+{
+  HandDataMsgAmp *msgs_p;
+  int max_count;
+  void *active_indicator;
+  HandDataType indicator_type;
+} hand_active_amp_data_msgs_arr_arg_t;
+typedef struct hand_active_iq_data_msgs_arr_arg_t
+{
+  HandDataMsgIq *msgs_p;
+  int max_count;
+  void *active_indicator;
+  HandDataType indicator_type;
+} hand_active_iq_data_msgs_arr_arg_t;
 
 typedef struct hand_ch101_simple_data_arg_t
 {
-  hand_chx01_simple_data_unit_t *d_p;
+  hand_chx01_simple_data_unit_t *simple_p;
   int count;
 } hand_ch101_simple_data_arg_t;
 
-// --- new: argument struct for I/Q encoder ---
-typedef struct hand_ch101_iq_arg_t 
+typedef struct hand_ch101_amp_data_arg_t
 {
-  hand_chx01_iq_data_unit_t *iq_p;    // pointer to first I/Q sample pair
-  int count;               // number of I/Q pairs
-} hand_ch101_iq_arg_t;
+  uint16_t *amp_p;
+  int count;
+} hand_ch101_amp_data_arg_t;
+typedef struct hand_ch101_iq_data_arg_t
+{
+  ch_iq_sample_t *iq_p;
+  int count;
+} hand_ch101_iq_data_arg_t;
+
+
+
 
 /* alias hand encode args */
 typedef hand_float_arr_arg_t hand_vl53l1x_data_arg_t;
@@ -87,12 +108,16 @@ bool hand_encode_timestamps_array(pb_ostream_t *stream, const pb_field_t *field,
 
 bool hand_encode_ch101_simple_data_array(pb_ostream_t *stream,
                                          const pb_field_t *field,
-                                         void *const *arg);
+                                         void *const *arg); 
+                                     
 
-// --- new: prototype for I/Q encoder ---
-bool hand_encode_ch101_iq_array(pb_ostream_t *stream,
-                                 const pb_field_t *field,
-                                 void *const *arg);                                         
+bool hand_encode_ch101_amp_data_array(pb_ostream_t *stream,
+                                      const pb_field_t *field,
+                                      void *const *arg);                                     
+
+bool hand_encode_ch101_iq_data_array(pb_ostream_t *stream,
+                                      const pb_field_t *field,
+                                      void *const *arg);                                     
 
 /**
  * @brief
@@ -107,7 +132,16 @@ bool hand_encode_data_msg_pointers_array(pb_ostream_t *stream,
                                          const pb_field_t *field,
                                          void *const *arg);
 
-bool hand_encode_active_data_msg_pointers_array(pb_ostream_t *stream,
+bool hand_encode_active_simple_data_msg_pointers_array(pb_ostream_t *stream,
+                                                const pb_field_t *field,
+                                                void *const *arg);
+
+
+bool hand_encode_active_amp_data_msg_pointers_array(pb_ostream_t *stream,
+                                                const pb_field_t *field,
+                                                void *const *arg);
+
+bool hand_encode_active_iq_data_msg_pointers_array(pb_ostream_t *stream,
                                                 const pb_field_t *field,
                                                 void *const *arg);
 

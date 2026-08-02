@@ -69,35 +69,53 @@ typedef struct hand_vl53l1x_data_t
   float data2[HAND_SIZE_PPB_VL53L1X];
 } hand_vl53l1x_data_t;
 
+// simple data 
 typedef struct hand_chx01_simple_data_unit_t
 {
+  int64_t timestamps;
   uint16_t sample_num;
   uint16_t amp;
   float range;
 } hand_chx01_simple_data_unit_t;
-
-// —— I/Q blob ——
-typedef struct {
-  ch_iq_sample_t iq_data[150]; 
+typedef struct hand_chx01_amp_data_unit_t
+{
+  uint16_t amp_data[150];
+} hand_chx01_amp_data_unit_t;
+typedef struct hand_chx01_iq_data_unit_t
+{
+  ch_iq_sample_t iq_data[150];
 } hand_chx01_iq_data_unit_t;
 
 /* for queue */
-typedef struct hand_chx01_group_data_element_t
+typedef struct hand_chx01_simple_data_element_t
 {
-  int64_t timestamp;
-  hand_chx01_simple_data_unit_t data[HAND_DEV_MAX_NUM_CH101];
-  hand_chx01_iq_data_unit_t iq[HAND_DEV_MAX_NUM_CH101];
-} hand_chx01_group_data_element_t;
+  hand_chx01_simple_data_unit_t simple_data[HAND_DEV_MAX_NUM_CH101];
+} hand_chx01_simple_data_element_t;
+typedef struct hand_chx01_amp_data_element_t
+{
+  hand_chx01_amp_data_unit_t amp_data[HAND_DEV_MAX_NUM_CH101];
+} hand_chx01_amp_data_element_t;
+typedef struct hand_chx01_iq_data_element_t
+{
+  hand_chx01_iq_data_unit_t iq_data[HAND_DEV_MAX_NUM_CH101];
+} hand_chx01_iq_data_element_t;
 
 /* for nanopb */
-typedef struct hand_chx01_data_t
+typedef struct hand_chx01_simple_data_t
 {
-  int64_t timestamps[HAND_SIZE_PPB_CH101];
-  hand_chx01_simple_data_unit_t data[HAND_DEV_MAX_NUM_CH101]
-                                    [HAND_SIZE_PPB_CH101];
-  hand_chx01_iq_data_unit_t     iq[HAND_DEV_MAX_NUM_CH101]
-                                  [HAND_SIZE_PPB_CH101];                                  
-} hand_chx01_data_t;
+  hand_chx01_simple_data_unit_t simple_data[HAND_DEV_MAX_NUM_CH101]
+                                           [HAND_SIZE_PPB_CH101_SIMPLE];                                  
+} hand_chx01_simple_data_t;
+typedef struct hand_chx01_amp_data_t
+{
+  hand_chx01_amp_data_unit_t amp_data[HAND_DEV_MAX_NUM_CH101]
+                                     [HAND_SIZE_PPB_CH101_AMP];                                  
+} hand_chx01_amp_data_t;
+typedef struct hand_chx01_iq_data_t
+{
+  hand_chx01_iq_data_unit_t iq_data[HAND_DEV_MAX_NUM_CH101]        
+                                   [HAND_SIZE_PPB_CH101_IQ];                                  
+} hand_chx01_iq_data_t;
 
 /* ping pong buffer struct (PPB) */
 #define HAND_PPB_UNSET_BUFFER_INDEX (0)
@@ -115,10 +133,27 @@ typedef struct hand_ppb_vl53l1x_data_t
 
 // CH101 related
 
-#define HAND_PPB_CH101_BUFFER_NUM (2)
-typedef struct hand_ppb_ch101_data_t
+#define HAND_PPB_CH101_SIMPLE_BUFFER_NUM (2)
+typedef struct hand_ppb_ch101_simple_data_t
 {
   bool ping_pong_flag;
   uint16_t current_index;
-  hand_chx01_data_t data[HAND_PPB_CH101_BUFFER_NUM];
-} hand_ppb_ch101_data_t;
+  hand_chx01_simple_data_t simple_data[HAND_PPB_CH101_SIMPLE_BUFFER_NUM];
+} hand_ppb_ch101_simple_data_t;
+
+#define HAND_PPB_CH101_AMP_BUFFER_NUM (2)
+typedef struct hand_ppb_ch101_amp_data_t
+{
+  bool ping_pong_flag;
+  uint16_t current_index;
+  hand_chx01_amp_data_t amp_data[HAND_PPB_CH101_AMP_BUFFER_NUM];
+} hand_ppb_ch101_amp_data_t;
+
+#define HAND_PPB_CH101_IQ_BUFFER_NUM (2)
+typedef struct hand_ppb_ch101_iq_data_t
+{
+  bool ping_pong_flag;
+  uint16_t current_index;
+  hand_chx01_iq_data_t iq_data[HAND_PPB_CH101_IQ_BUFFER_NUM];
+} hand_ppb_ch101_iq_data_t;
+

@@ -25,6 +25,16 @@
 #include "driver/spi_master.h"
 #include "driver/usb_serial_jtag.h"
 
+#include "conf_hand_espidf_board.h"
+#include "chirp_board_config.h"
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include "freertos/portmacro.h"
+
+#include "soniclib.h"
+
 #ifndef HAND_DEFAULT_LOG_SERVER_IP
 #define HAND_DEFAULT_LOG_SERVER_IP "172.20.10.2"
 #endif
@@ -147,13 +157,16 @@ static esp_err_t hand_i2c_bus_and_device_init(
   vl53l1x_init(vl53l1x_1, 0);
   vl53l1x_init(vl53l1x_2, 0);
 
-  /* XXX: init I2C1 (I2C for CH101 sensor), take place at ch_init */
-
+  /* init I2C1 (I2C for CH101 sensor), take place at ch_init */
+  
   /* init CH101 group */
   ch_group_t* ch101_group_p = &(devs_handle_p->ch101_group);
-  ch_dev_t* ch101_devs_p = &(devs_handle_p->ch101_dev); // Imcompatible pointer type
+  ch_dev_t* ch101_devs_p = &(devs_handle_p->ch101_dev); 
   // ch_dev_t* ch101_devs_p = (devs_handle_p->ch101_dev);
+  
   chbsp_board_init(ch101_group_p);
+  // SonicLib 在它的 chdrv_group_i2c_irq_handler() 末端就會自動幫你 reset I²C bus 
+  ch101_group_p->i2c_drv_flags |= 0;
 
   /* show macros defined in app_version.h of lib CH101 */
   ESP_LOGI(TAG, "CHX01 Information");
@@ -274,22 +287,22 @@ static esp_err_t hand_i2c_bus_and_device_init(
        */
 
       num_connected_sensors++;  // count one more connected
-      hand_global_ch101_active_dev_num |=
-          (1 << dev_num);  // add to active device bit mask
+      hand_global_ch101_active_dev_num |= (1 << dev_num);  // add to active device bit mask
 
       dev_config.mode = ch101_modes[dev_num];
-
+      
       if (dev_config.mode != CH_MODE_FREERUN) //Try to figure
       {                                         
         hand_global_ch101_triggered_dev_num++;  
       }
+      
 
       /* Init config structure with values from app_config.h */
       dev_config.max_range = CHIRP_SENSOR_MAX_RANGE_MM;
       dev_config.static_range = CHIRP_SENSOR_STATIC_RANGE;
 
       /* Test: If first CH101 sensor in Tx is free-running, set internal sample interval */
-      /* Why the output of CH101 remians 0? */
+      /*
       if (dev_config.mode == CH_MODE_FREERUN)
       {
         dev_config.sample_interval = HAND_MS_CH101_DEFAULT_MEASURE_PERIOD;
@@ -298,6 +311,7 @@ static esp_err_t hand_i2c_bus_and_device_init(
       {
         dev_config.sample_interval = 0; // Check the interval in NON-free-run mode
       }
+      */
 
       /* Set detection thresholds (CH201 only) */
       if (ch_get_part_number(dev_ptr) == CH201_PART_NUMBER)
@@ -313,6 +327,9 @@ static esp_err_t hand_i2c_bus_and_device_init(
         dev_config.thresh_ptr = 0;
       }
 
+      dev_config.time_plan = CH_TIME_PLAN_1;
+      dev_config.enable_target_int = 0;
+
       /* Apply sensor configuration */
       for (uint8_t i = 0; i < config_max_retry; ++i)
       {
@@ -326,11 +343,13 @@ static esp_err_t hand_i2c_bus_and_device_init(
        *   Note that interrupt is automatically enabled if using
        *   triggered modes.
        */
+
       if ((!chirp_err) && (dev_config.mode == CH_MODE_FREERUN))
       {
         chbsp_set_io_dir_in(dev_ptr);
         chbsp_io_interrupt_enable(dev_ptr);
       }
+      
 
       /* Read back and display config settings */
       if (!chirp_err)
@@ -358,8 +377,8 @@ static esp_err_t hand_i2c_bus_and_device_init(
   ESP_LOGI(TAG, "CH101 connected dev num is: %d", num_connected_sensors);
 
   /* TODO: check this is needed or not */
-  ch_set_rx_pretrigger(ch101_group_p, RX_PRETRIGGER_ENABLE);
-
+  ch_set_rx_pretrigger(ch101_group_p, 1);  
+  
   /* add callbacks */
   ch_io_int_callback_set(ch101_group_p, hand_cb_ch101_sensed);
   ch_io_complete_callback_set(ch101_group_p, hand_cb_ch101_io_completed);
@@ -582,7 +601,7 @@ static esp_err_t hand_gpio_init_debug(hand_devices_handle_t* devs_handle_p)
                          (1ULL << HAND_PIN_DEBUG_RXD0) |
                          (1ULL << HAND_PIN_DEBUG_P4);
   io_conf.mode = GPIO_MODE_OUTPUT;
-  io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+  io_conf.pull_up_en = GPIO_PULLUP_DISABLE; // check whether it needs to ENABLE or not~
   io_conf.pull_down_en = GPIO_PULLDOWN_ENABLE;
   ret = gpio_config(&io_conf);
 
@@ -676,7 +695,11 @@ static esp_err_t hand_isr_init()
   /* TODO: check this could be deleted or not? */
   /* TODO: if confirm can be remove, remove the one in CH101 */
   // No INTR flag, should failed (ch101 lib already use it)
-  gpio_install_isr_service(0);
+  esp_err_t err = gpio_install_isr_service(0);
+  if (err != ESP_OK && err != ESP_ERR_INVALID_STATE)
+  {
+    ESP_LOGE(TAG, "gpio_install_isr_service failed: %s", esp_err_to_name(err));
+  }
 
   /* add vl53l1x related isr callback  */
   ESP_LOGI(TAG, "Initializing ISR for VL53L1X...");
@@ -799,7 +822,6 @@ esp_err_t hand_init(const char* ssid, const char* password, bool init_dev)
     hand_spi_bus_and_device_init(&hand_global_devs_handle);
     hand_i2c_bus_and_device_init(&hand_global_devs_handle);
     hand_gpio_init(&hand_global_devs_handle);
-
     hand_isr_init();
     /* TODO: get all gpio states */
     // gpio_dump_all_io_configuration();
@@ -808,3 +830,4 @@ esp_err_t hand_init(const char* ssid, const char* password, bool init_dev)
   ESP_LOGI(TAG, "hand init completed!");
   return ret;
 }
+

@@ -27,12 +27,12 @@
 
 /* CH101 mode related */
 // clang-format off
-// #define HAND_CH101_DEFAULT_MODE {CH_MODE_TRIGGERED_TX_RX, CH_MODE_TRIGGERED_RX_ONLY, CH_MODE_TRIGGERED_TX_RX, CH_MODE_TRIGGERED_TX_RX}
+#define HAND_CH101_DEFAULT_MODE {CH_MODE_TRIGGERED_RX_ONLY, CH_MODE_TRIGGERED_RX_ONLY, CH_MODE_TRIGGERED_RX_ONLY, CH_MODE_TRIGGERED_TX_RX}
 
-// 建議使用 FREERUN
-#define HAND_CH101_DEFAULT_MODE {CH_MODE_FREERUN, CH_MODE_FREERUN, CH_MODE_FREERUN, CH_MODE_FREERUN}
+// Suggest FREERUN by Dennis Liu
+//#define HAND_CH101_DEFAULT_MODE {CH_MODE_FREERUN, CH_MODE_FREERUN, CH_MODE_FREERUN, CH_MODE_FREERUN}
 
-// 跟外殼形狀有關
+// Related to "shape of housing"
 #define HAND_CH101_FW_INIT {ch101_gpr_open_init, ch101_gpr_open_init, ch101_gpr_open_init, ch101_gpr_open_init}
 // #define HAND_CH101_FW_INIT {ch101_gpr_sr_open_init, ch101_gpr_sr_open_init, ch101_gpr_sr_open_init, ch101_gpr_sr_open_init}
 
@@ -63,20 +63,28 @@
 #define HAND_SIZE_SPI3_KX132_QUEUE (5)
 
 // Ping pong buffer (PPB)
-
+// frame rate
 #define HAND_SIZE_PPB_VL53L1X (35)
-#define HAND_SIZE_PPB_CH101   (35)
+#define HAND_SIZE_PPB_CH101_SIMPLE (35) 
+#define HAND_SIZE_PPB_CH101_AMP (5) 
+#define HAND_SIZE_PPB_CH101_IQ (5) 
+
 
 // NanoPB stream buffer size
-
+// size of messages
 #define HAND_SIZE_NANOPB_BUFFER_VL53L1X (2048)
-#define HAND_SIZE_NANOPB_BUFFER_CH101   (4192)
+#define HAND_SIZE_NANOPB_BUFFER_CH101_SIMPLE (4192)
+#define HAND_SIZE_NANOPB_BUFFER_CH101_AMP (6000)
+#define HAND_SIZE_NANOPB_BUFFER_CH101_IQ  (12000)
+
 
 // Queue size (size of the queue used for buffering real-time data before
 // storing it in the ping-pong buffer.)
 
 #define HAND_SIZE_QUEUE_VL53L1X (10)
-#define HAND_SIZE_QUEUE_CH101   (10)
+#define HAND_SIZE_QUEUE_CH101_SIMPLE (10)
+#define HAND_SIZE_QUEUE_CH101_AMP (10)
+#define HAND_SIZE_QUEUE_CH101_IQ (10)
 
 /* Time related (ms) [delay, polling...] */
 
@@ -91,11 +99,36 @@
 #define HAND_MS_VL53L1X_DEFAULT_MEASURE_PERIOD (100)
 
 // CH101 related
-#define HAND_MS_CH101_QUEUE_MAX_DELAY (50)
+#define HAND_MS_CH101_QUEUE_MAX_DELAY (100)
 /* XXX: I don't know why but this value will be doubled at somewhere? */
-#define HAND_MS_CH101_DEFAULT_MEASURE_PERIOD (50)
-#define HAND_MS_CH101_SEND_DATA              (500)
+// Trying to figure...
+#define HAND_MS_CH101_DEFAULT_MEASURE_PERIOD (100)
+#define HAND_MS_CH101_SEND_SIMPLE_DATA       (100) 
+#define HAND_MS_CH101_SEND_AMP_DATA          (100) 
+#define HAND_MS_CH101_SEND_IQ_DATA           (100) 
+
+// CH101 scoring system for side lobe
+#define HAND_CH101_SCORING_ACOUSTIC_COUPLING_ETA (0.5102)
+#define HAND_CH101_SCORING_BASELINE_NOISE_FLOOR (100.0f)
+#define HAND_CH101_SCORING_SNR_TRESHOLD_MIN (6.0f)
+#define HAND_CH101_SCORING_SNR_TRESHOLD_TARGET (20.0f)
+#define HAND_CH101_SCORING_SNR_TRESHOLD_SIDE_LOBE_REJECTION (6.0f)
+#define HAND_CH101_SCORING_MASK_GAIN_FACTOR (1.0f)
+
+// CH101 Tx/Rx mode switch
+#define HAND_CH101_SWITCH_AMP_TRESHOLD_MIN (200)
+#define HAND_CH101_SWITCH_BASELINE_NOISE_FLOOR (100.0F)
+#define HAND_CH101_SWITCH_STABILITY_HOLD_CYCLE (3)
+
+
 
 // RGB LED related
 #define HAND_MS_RGB_LED_BLINK_DELAY (1000)
 #define HAND_MS_ALIVE_BLINK_DELAY   HAND_MS_RGB_LED_BLINK_DELAY
+
+
+   
+
+
+
+
