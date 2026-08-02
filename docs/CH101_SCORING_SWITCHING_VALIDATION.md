@@ -1,5 +1,20 @@
 # CH101 scoring/switching host validation
 
+## GitHub harness payload
+
+The exact host harness is stored on `ch101-scoring-switching-v2` as:
+
+```text
+tests/host/CH101_scoring_switching_host_test.c.gz.b64
+```
+
+Decode it before running the build command:
+
+```bash
+base64 -d tests/host/CH101_scoring_switching_host_test.c.gz.b64 | gzip -dc \
+  > CH101_scoring_switching_host_test.c
+```
+
 ## Build command
 
 ```bash
