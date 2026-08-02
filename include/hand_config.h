@@ -65,10 +65,9 @@
 // Ping pong buffer (PPB)
 // frame rate
 #define HAND_SIZE_PPB_VL53L1X (35)
-#define HAND_SIZE_PPB_CH101_SIMPLE (35) 
-#define HAND_SIZE_PPB_CH101_AMP (5) 
-#define HAND_SIZE_PPB_CH101_IQ (5) 
-
+#define HAND_SIZE_PPB_CH101_SIMPLE (35)
+#define HAND_SIZE_PPB_CH101_AMP (5)
+#define HAND_SIZE_PPB_CH101_IQ (5)
 
 // NanoPB stream buffer size
 // size of messages
@@ -76,7 +75,6 @@
 #define HAND_SIZE_NANOPB_BUFFER_CH101_SIMPLE (4192)
 #define HAND_SIZE_NANOPB_BUFFER_CH101_AMP (6000)
 #define HAND_SIZE_NANOPB_BUFFER_CH101_IQ  (12000)
-
 
 // Queue size (size of the queue used for buffering real-time data before
 // storing it in the ping-pong buffer.)
@@ -103,32 +101,41 @@
 /* XXX: I don't know why but this value will be doubled at somewhere? */
 // Trying to figure...
 #define HAND_MS_CH101_DEFAULT_MEASURE_PERIOD (100)
-#define HAND_MS_CH101_SEND_SIMPLE_DATA       (100) 
-#define HAND_MS_CH101_SEND_AMP_DATA          (100) 
-#define HAND_MS_CH101_SEND_IQ_DATA           (100) 
+#define HAND_MS_CH101_SEND_SIMPLE_DATA       (100)
+#define HAND_MS_CH101_SEND_AMP_DATA          (100)
+#define HAND_MS_CH101_SEND_IQ_DATA           (100)
 
-// CH101 scoring system for side lobe
-#define HAND_CH101_SCORING_ACOUSTIC_COUPLING_ETA (0.5102)
-#define HAND_CH101_SCORING_BASELINE_NOISE_FLOOR (100.0f)
-#define HAND_CH101_SCORING_SNR_TRESHOLD_MIN (6.0f)
-#define HAND_CH101_SCORING_SNR_TRESHOLD_TARGET (20.0f)
-#define HAND_CH101_SCORING_SNR_TRESHOLD_SIDE_LOBE_REJECTION (6.0f)
-#define HAND_CH101_SCORING_MASK_GAIN_FACTOR (1.0f)
+/* CH101 range-quality scoring and dynamic TX/RX switching.
+ * dev1 is deliberately excluded because its DSP range/amplitude outputs are
+ * not valid for this project, while dev0/dev2/dev3 remain eligible. */
+#define HAND_CH101_QUALITY_DEV_MASK (0x0DU)
 
-// CH101 Tx/Rx mode switch
-#define HAND_CH101_SWITCH_AMP_TRESHOLD_MIN (200)
-#define HAND_CH101_SWITCH_BASELINE_NOISE_FLOOR (100.0F)
-#define HAND_CH101_SWITCH_STABILITY_HOLD_CYCLE (3)
+/* The HAND normal-mode measurements show severe near-field/ring-down
+ * instability below approximately 15 cm.  This interval is excluded only from
+ * the waveform noise estimator; it is not an unconditional range cutoff. */
+#define HAND_CH101_QUALITY_RINGDOWN_EXCLUSION_MM (150U)
+#define HAND_CH101_QUALITY_MIN_VALID_RANGE_MM     (150.0f)
+#define HAND_CH101_QUALITY_MIN_NOISE_SAMPLES      (8U)
 
+/* The measured HAND FoV lobe plot uses the normalized -6 dB half-power contour.
+ * It is a relative directivity reference, not an online angle measurement. */
+#define HAND_CH101_FOV_HALF_POWER_DB (-6.0f)
 
+/* Switching control policy.  Hold count and score margin are controller
+ * parameters to be confirmed on hardware, not CH101 physical constants. */
+#define HAND_CH101_SWITCH_STABILITY_HOLD_CYCLE (3U)
+#define HAND_CH101_SWITCH_SCORE_MARGIN          (0.0f)
+
+/* RX pre-trigger improves very-short-range RX-only capture but shortens the
+ * RX-only maximum range by about 200 mm.  Keep disabled for far-fingertip work. */
+#define HAND_CH101_RX_PRETRIGGER_ENABLE (0U)
+
+/* A -6 dB level cannot prove that an echo belongs to the main lobe because the
+ * measured pattern contains side lobes above the same contour.  Therefore the
+ * destructive gate is disabled by default; quality is used for weighting and
+ * TX switching instead. */
+#define HAND_CH101_REJECT_BELOW_HALF_POWER (0U)
 
 // RGB LED related
 #define HAND_MS_RGB_LED_BLINK_DELAY (1000)
 #define HAND_MS_ALIVE_BLINK_DELAY   HAND_MS_RGB_LED_BLINK_DELAY
-
-
-   
-
-
-
-
