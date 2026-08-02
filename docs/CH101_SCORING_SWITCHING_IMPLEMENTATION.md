@@ -4,7 +4,7 @@
 
 This implementation replaces the arbitrary mixed-unit score in the uploaded, newer `hand_task.c` and keeps the scoring/switching path inside `_hand_ch101_handle_data_ready()`.
 
-The checked-in `branch_v1` file layout is older than the uploaded source: `branch_v1` stores CH101 simple and IQ data in one group structure, whereas the uploaded source has separate simple/AMP/IQ queues and protobuf paths. For that reason, this branch carries an apply-ready patch and a full reviewed source file rather than overwriting the incompatible `branch_v1` source path.
+The checked-in `branch_v1` file layout is older than the uploaded source: `branch_v1` stores CH101 simple and IQ data in one group structure, whereas the uploaded source has separate simple/AMP/IQ queues and protobuf paths. For that reason, this branch carries an apply-ready patch payload and a complete reviewed source payload rather than overwriting the incompatible `branch_v1` source path.
 
 ## Sensor set
 
@@ -118,7 +118,20 @@ Dynamic switching requires one triggered TX/RX node and the remaining connected 
 
 Receive pre-triggering is independent of TX selection. It improves very-short-distance RX-only capture but reduces the configured RX-only maximum range by about 200 mm. For the stated far-fingertip priority, keep it disabled unless short-distance tests demonstrate a need.
 
-## Files
+## Artifacts and decoding
 
-- `patches/hand_task_ch101_scoring.patch` — unified patch against the uploaded newer `hand_task.c`.
-- `reference/hand_task_ch101_scored.c` — complete modified source for direct review and local replacement.
+The two text payloads are gzip-compressed and Base64-encoded to preserve the exact uploaded-file patch/source while keeping the older branch schema untouched:
+
+- `patches/hand_task_ch101_scoring.patch.gz.b64`
+- `reference/hand_task_ch101_scored.c.gz.b64`
+
+Decode them with:
+
+```bash
+base64 -d patches/hand_task_ch101_scoring.patch.gz.b64 | gzip -dc \
+  > hand_task_ch101_scoring.patch
+base64 -d reference/hand_task_ch101_scored.c.gz.b64 | gzip -dc \
+  > hand_task_ch101_scored.c
+```
+
+Apply the patch only to the newer source revision whose CH101 path has separate simple/AMP/IQ structures. Do not apply it blindly to `branch_v1`; port the helper/state logic after that branch is synchronized with the newer schema.
