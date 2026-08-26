@@ -107,28 +107,61 @@
 #define HAND_MS_CH101_SEND_AMP_DATA          (100) 
 #define HAND_MS_CH101_SEND_IQ_DATA           (100) 
 
-// CH101 scoring system for side lobe
-#define HAND_CH101_SCORING_ACOUSTIC_COUPLING_ETA (0.5102)
-#define HAND_CH101_SCORING_BASELINE_NOISE_FLOOR (100.0f)
-#define HAND_CH101_SCORING_SNR_TRESHOLD_MIN (6.0f)
-#define HAND_CH101_SCORING_SNR_TRESHOLD_TARGET (20.0f)
-#define HAND_CH101_SCORING_SNR_TRESHOLD_SIDE_LOBE_REJECTION (6.0f)
-#define HAND_CH101_SCORING_MASK_GAIN_FACTOR (1.0f)
+#define HAND_CH101_CONTROL_DEV_MASK (0x0DU)
 
-// CH101 Tx/Rx mode switch
-#define HAND_CH101_SWITCH_AMP_TRESHOLD_MIN (200)
-#define HAND_CH101_SWITCH_BASELINE_NOISE_FLOOR (100.0F)
-#define HAND_CH101_SWITCH_STABILITY_HOLD_CYCLE (3)
+#define HAND_CH101_NOISE_ESTIMATOR_START_MM (150U)
+#define HAND_CH101_MIN_CONTROL_RANGE_MM      (150.0f)
 
+#define HAND_CH101_MIN_NOISE_SAMPLES (8U)
+
+#define HAND_CH101_EMPIRICAL_FOV_CONTOUR_DB (-6.0f)
+
+#define HAND_CH101_SWITCH_HOLD_CYCLES    (3U)
+#define HAND_CH101_SWITCH_QUALITY_MARGIN (0.0f)
+
+#define HAND_CH101_ALLOW_UNCOMPENSATED_REACQUISITION \ (0U)
+
+#define HAND_CH101_RX_PRETRIGGER_ENABLE (0U)
+
+#define HAND_CH101_INVALID_DEV (UINT8_MAX)
 
 
 // RGB LED related
 #define HAND_MS_RGB_LED_BLINK_DELAY (1000)
 #define HAND_MS_ALIVE_BLINK_DELAY   HAND_MS_RGB_LED_BLINK_DELAY
 
+/* Enable uncompensated raw-amplitude recovery when no valid target range exists */
+#define HAND_CH101_ALLOW_UNCOMPENSATED_REACQUISITION (1U)
 
-   
+/* Sensors allowed to participate in range-quality scoring and TX selection.
+ * 0x0D selects dev0, dev2, and dev3. dev1 remains connected for the existing
+ * SonicLib group/interrupt architecture but is excluded from control. */
+#define HAND_CH101_CONTROL_DEV_MASK (0x0DU)
 
+/* Conservative project-specific lower bound used only for scoring/control.
+ * This is not declared to be the universal CH101 ring-down distance. */
+#define HAND_CH101_NOISE_ESTIMATOR_START_MM (150U)
+#define HAND_CH101_MIN_CONTROL_RANGE_MM      (150.0f)
+
+/* Numerical guard for a robust median estimate. This is a controller setting,
+ * not a CH101 physical constant. */
+#define HAND_CH101_MIN_NOISE_SAMPLES (8U)
+
+/* Empirical contour reported by the HAND FoV experiment. It is not an online
+ * main-lobe classifier because the measured pattern also contains side lobes. */
+#define HAND_CH101_EMPIRICAL_FOV_CONTOUR_DB (-6.0f)
+
+/* Switching-controller settings; calibrate on the assembled array. */
+#define HAND_CH101_SWITCH_HOLD_CYCLES    (3U)
+#define HAND_CH101_SWITCH_QUALITY_MARGIN (0.0f)
+
+/* With no valid current-TX range, bistatic spreading compensation is
+ * impossible. Enabling this permits a clearly marked raw-amplitude recovery
+ * policy, not a physics-derived comparison. */
+#define HAND_CH101_ALLOW_UNCOMPENSATED_REACQUISITION (0U)
+
+/* Far-range priority: RX pre-triggering shortens RX-only maximum range. */
+#define HAND_CH101_RX_PRETRIGGER_ENABLE (0U)
 
 
 

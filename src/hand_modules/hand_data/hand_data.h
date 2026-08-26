@@ -69,6 +69,45 @@ typedef struct hand_vl53l1x_data_t
   float data2[HAND_SIZE_PPB_VL53L1X];
 } hand_vl53l1x_data_t;
 
+typedef struct hand_ch101_range_quality_t
+{
+  /* Device and API validity */
+  bool is_connected;
+  bool is_control_eligible;
+  bool has_valid_dsp_range;
+  bool has_current_iq_trace;
+
+  /* Handoff-comparison validity */
+  bool has_valid_handoff_metric;
+  bool handoff_metric_is_spreading_compensated;
+
+  ch_mode_t operating_mode;
+
+  /* Mode-dependent measurement:
+   * TX/RX: one-way target range.
+   * RX-only: undivided pitch-catch ToF path. */
+  float measured_path_mm;
+
+  /* CH101 DSP-selected target amplitude */
+  float dsp_echo_amplitude_lsb;
+
+  /* IQ-derived signal/noise mechanism */
+  float iq_noise_power_median_lsb2;
+  float echo_signal_power_lsb2;
+  float echo_snr_linear;
+  float echo_snr_db;
+  float snr_reliability_score;
+
+  /* Cross-sensor handoff mechanism.
+   * Normally LSB after leading spreading compensation.
+   * In an explicitly enabled recovery mode, raw LSB amplitude. */
+  float handoff_comparison_value;
+  float relative_handoff_level_db;
+  float relative_handoff_reliability_score;
+
+  /* Final dimensionless control quality */
+  float combined_range_quality_score;
+} hand_ch101_range_quality_t;
 // simple data 
 typedef struct hand_chx01_simple_data_unit_t
 {

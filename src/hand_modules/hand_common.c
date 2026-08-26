@@ -302,7 +302,7 @@ static esp_err_t hand_i2c_bus_and_device_init(
       dev_config.static_range = CHIRP_SENSOR_STATIC_RANGE;
 
       /* Test: If first CH101 sensor in Tx is free-running, set internal sample interval */
-      /*
+      
       if (dev_config.mode == CH_MODE_FREERUN)
       {
         dev_config.sample_interval = HAND_MS_CH101_DEFAULT_MEASURE_PERIOD;
@@ -311,7 +311,7 @@ static esp_err_t hand_i2c_bus_and_device_init(
       {
         dev_config.sample_interval = 0; // Check the interval in NON-free-run mode
       }
-      */
+      
 
       /* Set detection thresholds (CH201 only) */
       if (ch_get_part_number(dev_ptr) == CH201_PART_NUMBER)
