@@ -359,6 +359,122 @@ void hand_task_vl53l1x_send_data(void* arg)
   }
 }
 
+static uint8_t hand_ch101_current_tx_dev = HAND_CH101_INVALID_DEV;
+static uint8_t hand_ch101_pending_tx_dev = HAND_CH101_INVALID_DEV;
+static uint8_t hand_ch101_pending_tx_count = 0U;
+
+enum
+{
+  HAND_CH101_TRACE_SAMPLE_CAPACITY =
+      sizeof(((hand_chx01_iq_data_unit_t*)0)->iq_data) /
+      sizeof(ch_iq_sample_t)
+};
+
+static float _hand_ch101_clampf(float value, float lower, float upper)
+{
+  if (value < lower) return lower;
+  if (value > upper) return upper;
+  return value;
+}
+
+static bool _hand_ch101_is_control_eligible(uint8_t dev_num)
+{
+  return (dev_num < HAND_DEV_MAX_NUM_CH101) &&
+         ((HAND_CH101_CONTROL_DEV_MASK & (1U << dev_num)) != 0U);
+}
+
+static float _hand_ch101_median_noise_filter(const ch_iq_sample_t* iq_data,
+                                             uint16_t first_noise_sample,
+                                             uint16_t sample_count,
+                                             float* scratch)
+{
+  if ((iq_data == NULL) || (scratch == NULL) ||
+      (first_noise_sample >= sample_count))
+  {
+    return NAN;
+  }
+
+  // Calculate noise energy and store it in the scratch buffer
+  const uint16_t count = (uint16_t)(sample_count - first_noise_sample);
+  for (uint16_t i = 0U; i < count; ++i)
+  {
+    scratch[i] = ch_iq_to_amplitude(&iq_data[first_noise_sample + i]);
+  }
+
+  // Merge-insertion sort (perform in-place sorting directly in scratch)
+  for (uint16_t i = 1U; i < count; ++i)
+  {
+    const float key = scratch[i];
+    uint16_t j = i;
+    while ((j > 0U) && (scratch[j - 1U] > key))
+    {
+      scratch[j] = scratch[j - 1U];
+      --j;
+    }
+    scratch[j] = key;
+  }
+
+  // Extract the median
+  if ((count & 1U) != 0U)
+  {
+    return scratch[count / 2U];
+  }
+
+  return 0.5f * (scratch[(count / 2U) - 1U] + scratch[count / 2U]);
+}
+
+/**
+ * @brief Round-robin scanning for initial target acquisition without cross-talk disturbance.
+ */
+typedef enum {
+    HAND_CH101_STATE_INITIAL_SCAN,
+    HAND_CH101_STATE_TRACKING
+} hand_ch101_state_t;
+
+static hand_ch101_state_t g_ch101_state = HAND_CH101_STATE_INITIAL_SCAN;
+static uint8_t g_scan_dev_index = 0;
+
+
+static void hand_ch101_perform_initial_scan(ch_group_t* grp_ptr) 
+{
+    const uint8_t num_ports = ch_get_num_ports(grp_ptr);
+    uint8_t target_tx = HAND_CH101_INVALID_DEV;
+
+    // Find next eligible control sensor according to HAND_CH101_CONTROL_DEV_MASK (0x0D)
+    for (uint8_t i = 0; i < num_ports; ++i) 
+    {
+        uint8_t candidate = (g_scan_dev_index + i) % num_ports;
+        if (_hand_ch101_is_control_eligible(candidate))
+        { 
+          ch_dev_t* dev_ptr = ch_get_dev_ptr(grp_ptr, candidate);
+          if ((dev_ptr != NULL) && ch_sensor_is_connected(dev_ptr))
+          {
+              target_tx = candidate;
+              g_scan_dev_index = (candidate + 1) % num_ports;
+              break;
+          }
+        }
+    }
+    // Reconfigure modes transactionally 1 TX_RX device rest RX_ONLY
+
+    for (uint8_t dev = 0U; dev < num_ports; ++dev) 
+    {
+      ch_dev_t* dev_ptr = ch_get_dev_ptr(grp_ptr, dev);
+      
+      if ((dev_ptr != NULL) && ch_sensor_is_connected(dev_ptr)) 
+      {
+        if (dev == target_tx) 
+        {
+            ch_set_mode(dev_ptr, CH_MODE_TRIGGERED_TX_RX);
+        } 
+        else 
+        {
+            ch_set_mode(dev_ptr, CH_MODE_TRIGGERED_RX_ONLY);
+        }
+      }
+    }
+}
+
 static void _hand_ch101_handle_data_ready(ch_group_t* grp_ptr)
 {
   hand_chx01_simple_data_element_t simple_data = {0};
@@ -367,8 +483,16 @@ static void _hand_ch101_handle_data_ready(ch_group_t* grp_ptr)
 
   uint8_t dev_num;
   int num_samples = 0;
-  uint8_t amp_error = 0;
+  // uint8_t amp_error = 0;
   uint8_t iq_error = 0;
+
+  hand_ch101_range_quality_t quality[HAND_DEV_MAX_NUM_CH101] = {0};
+  float noise_power_scratch[HAND_CH101_TRACE_SAMPLE_CAPACITY] = {0.0f};
+
+  uint8_t tx_count = 0U;
+  uint8_t actual_tx_dev = HAND_CH101_INVALID_DEV;
+
+  const uint8_t num_ports = ch_get_num_ports(grp_ptr);
 
   for (dev_num = 0; dev_num < ch_get_num_ports(grp_ptr); dev_num++)
   {
@@ -388,7 +512,10 @@ static void _hand_ch101_handle_data_ready(ch_group_t* grp_ptr)
      
       if (ch_get_mode(dev_ptr) == CH_MODE_TRIGGERED_TX_RX)
       {
-        range = ch_get_range(dev_ptr, CH_RANGE_DIRECT);
+        actual_tx_dev = dev_num;
+        ++tx_count;
+
+        range = ch_get_range(dev_ptr, CH_RANGE_ECHO_ROUND_TRIP);
         simple_data.simple_data[dev_num].range = range / 32.0f;
         simple_data.simple_data[dev_num].amp = ch_get_amplitude(dev_ptr);
 
@@ -404,7 +531,8 @@ static void _hand_ch101_handle_data_ready(ch_group_t* grp_ptr)
       else if (ch_get_mode(dev_ptr) == CH_MODE_TRIGGERED_RX_ONLY)
       {
         range = ch_get_range(dev_ptr, CH_RANGE_ECHO_ROUND_TRIP);
-
+        simple_data.simple_data[dev_num].range = range / 32.0f;
+        simple_data.simple_data[dev_num].amp = ch_get_amplitude(dev_ptr);
         if (range == CH_NO_TARGET)
         {
           simple_data.simple_data[dev_num].range = 0;
@@ -415,19 +543,11 @@ static void _hand_ch101_handle_data_ready(ch_group_t* grp_ptr)
         }
       }
 
-      simple_data.simple_data[dev_num].range = range / 32.0f;
-      simple_data.simple_data[dev_num].amp = ch_get_amplitude(dev_ptr);
       
 
 
       num_samples = ch_get_num_samples(dev_ptr);
       simple_data.simple_data[dev_num].sample_num = num_samples;
-      
-      amp_error = ch_get_amplitude_data(dev_ptr, 
-                                        amp_data.amp_data[dev_num].amp_data, 
-                                        0, 
-                                        num_samples, 
-                                        CH_IO_MODE_BLOCK);
       
       /*                                  
       if (!amp_error)
@@ -448,183 +568,407 @@ static void _hand_ch101_handle_data_ready(ch_group_t* grp_ptr)
       
       if (!iq_error)
       {
-        float power_peak = 0.0f;
-        uint16_t peak_sample_idx = 0;
-
         // Step A: Calculate Instantaneous Magnitude from raw I and Q samples
-        for (int k = 0; k < num_samples; ++k)
+        for (int s = 0; s < num_samples; ++s)
         {
-          int16_t i = iq_data.iq_data[dev_num].iq_data[k].i;
-          int16_t q = iq_data.iq_data[dev_num].iq_data[k].q;
-
-          // Mag = sqrt(I^2 + Q^2)
-          float power = sqrtf((float)(i * i + q * q));
-
-          if (power > power_peak)
-          {
-            power_peak = power;
-            peak_sample_idx = k;
-          }
+          amp_data.amp_data[dev_num].amp_data[s] = ch_iq_to_amplitude(&iq_data.iq_data[dev_num].iq_data[s]);
         }
-
-        // Step B: Incorporate AH101-180180 Physical Coupling Factor
-        float effective_signal_amplitude = power_peak * HAND_CH101_SCORING_ACOUSTIC_COUPLING_ETA * HAND_CH101_SCORING_MASK_GAIN_FACTOR;
-
-        // Step C: Compute Signal-to-Noise Ratio (SNR in dB)
-        float snr_linear = effective_signal_amplitude / HAND_CH101_SCORING_BASELINE_NOISE_FLOOR;
-        if (snr_linear < 1e-3f) snr_linear = 1e-3f; // Prevent log(0)
-        
-        float snr_db = 20.0f * log10f(snr_linear);
-
-        // Step D: Calculate Confidence Score based on SNR Margin
-        float m_snr = (snr_db - HAND_CH101_SCORING_SNR_TRESHOLD_MIN) / (HAND_CH101_SCORING_SNR_TRESHOLD_TARGET - HAND_CH101_SCORING_SNR_TRESHOLD_MIN);
-        
-        // Clamp score between [0.0, 1.0]
-        float confidence_score = m_snr;
-        if (confidence_score < 0.0f) confidence_score = 0.0f;
-        if (confidence_score > 1.0f) confidence_score = 1.0f;
-
-        // Step E: Side-Lobe Artifact Rejection Gate
-        // If SNR is below minimum usable threshold, suppress target as side-lobe diffraction
-        if (snr_db < HAND_CH101_SCORING_SNR_TRESHOLD_MIN)
+        /*
+        for (int i = 0; i < num_samples; ++i)
         {
-          ESP_LOGW(TAG, "Port {%d}: Suppressed Side-Lobe Artifact at %d mm (SNR: %.2f dB, Score: %.2f)",
-                   dev_num, simple_data.simple_data[dev_num].range, snr_db, confidence_score);
-          
-          simple_data.simple_data[dev_num].range = 0;
-          simple_data.simple_data[dev_num].amp = 0;
+          ESP_LOGI(TAG, "dev %d num sample %d q: %d, i: %d",
+                   dev_num,
+                   i + 1,
+                   iq_data.iq_data[dev_num].q[i], 
+                   iq_data.iq_data[dev_num].i[i]);
         }
-        else
-        {
-          ESP_LOGI(TAG, "Port {%d}: Valid Target at %.1f mm | Peak IQ Amp: %.1f LSB | Effective Amp: %.1f LSB | SNR: %.2f dB | Score: %.2f",
-                   dev_num, simple_data.simple_data[dev_num].range, power_peak, effective_signal_amplitude, snr_db, confidence_score);
-        }
-      } 
+        */
+      }
+
+      /* Build quality evaluation information */
+      hand_ch101_range_quality_t* const metric = &quality[dev_num];
+      metric->is_connected = true;
+      metric->is_control_eligible = _hand_ch101_is_control_eligible(dev_num);
+      metric->operating_mode = mode;
+      
+      if ((range != CH_NO_TARGET) && (range != 0U))
+      {
+        metric->measured_path_mm = range / 32.0f;
+      }
       else
       {
-        ESP_LOGI(TAG, "CH101 Read iq error exists...");
+        metric->measured_path_mm = NAN;
       }
       
+      metric->has_valid_dsp_range = isfinite(metric->measured_path_mm) && (metric->measured_path_mm > 0.0f);
       
-      /*
-      for (int i = 0; i < num_samples; ++i)
+      if (metric->has_valid_dsp_range)
       {
-        ESP_LOGI(TAG, "dev %d num sample %d q: %d, i: %d",
-                 dev_num,
-                 i + 1,
-                 iq_data.iq_data[dev_num].q[i], 
-                 iq_data.iq_data[dev_num].i[i]);
+        metric->dsp_echo_amplitude_lsb = (float)simple_data.simple_data[dev_num].amp;
       }
-      */
-    }
-
-    static uint8_t current_tx_dev = 0;
-    static uint8_t pending_candidate_tx = 0;
-    static uint8_t candidate_hold_count = 0;
-  
-    float sensor_scores[HAND_DEV_MAX_NUM_CH101] = {0.0f};
-    uint8_t num_ports = ch_get_num_ports(grp_ptr);
-    uint8_t best_candidate_tx = current_tx_dev;
-    float max_score = -1.0f;
-  
-    for (uint8_t dev = 0; dev < num_ports; dev++)
-    {
-      ch_dev_t* dev_ptr = ch_get_dev_ptr(grp_ptr, dev);
-      if (!ch_sensor_is_connected(dev_ptr)) continue;
-  
-      // 1. Amplitude Peak Evaluation
-      float amp_score = (float)simple_data.simple_data[dev].amp;
-  
-      // 2. Compute Total Acoustic Energy & Peak SNR from Raw IQ Data
-      float total_iq_energy = 0.0f;
-      float peak_iq_power = 0.0f;
-      uint16_t samples = simple_data.simple_data[dev].sample_num;
-  
-      for (uint16_t s = 0; s < samples; s++)
+      else
       {
-        int16_t i = iq_data.iq_data[dev].iq_data[s].i;
-        int16_t q = iq_data.iq_data[dev].iq_data[s].q;
-        float power = (float)(i * i + q * q);
-        
-        total_iq_energy += power;
-        if (power > peak_iq_power)
-        {
-          peak_iq_power = power;
-        }
+        metric->dsp_echo_amplitude_lsb = 0.0f;
       }
-  
-      float snr_linear = (peak_iq_power > 0.0f) ? (peak_iq_power / HAND_CH101_SWITCH_BASELINE_NOISE_FLOOR) : 0.0f;
-  
-      // 3. Composite Theoretical Score Formulation: S = w1*Amp + w2*Energy + w3*SNR
-      sensor_scores[dev] = (0.5f * amp_score) + 
-                           (0.3f * sqrtf(total_iq_energy)) + 
-                           (0.2f * snr_linear);
-  
-      if (sensor_scores[dev] > max_score)
-      {
-        max_score = sensor_scores[dev];
-        best_candidate_tx = dev;
-      }
-    }
-  
-    // Hysteresis Decision Logic to handle out-of-beam attenuation and temporal jitter
-    if (best_candidate_tx != current_tx_dev)
-    {
-      float current_tx_score = sensor_scores[current_tx_dev];
       
-      // Check if new candidate exceeds current Tx score by hysteresis threshold
-      if ((max_score - current_tx_score) > HAND_CH101_SWITCH_AMP_TRESHOLD_MIN)
+      metric->has_current_iq_trace = (!iq_error) && (num_samples > 0);
+      metric->echo_snr_db = -INFINITY;
+      metric->relative_handoff_level_db = -INFINITY;
+      
+      /* Calculate noise and SNR */
+      if (metric->is_control_eligible && metric->has_current_iq_trace)
       {
-        if (best_candidate_tx == pending_candidate_tx)
+        const uint16_t first_noise_sample = ch_mm_to_samples(dev_ptr, HAND_CH101_NOISE_ESTIMATOR_START_MM);
+        if ((first_noise_sample < num_samples) && 
+            ((uint16_t)(num_samples - first_noise_sample) >= (uint16_t)HAND_CH101_MIN_NOISE_SAMPLES))
         {
-          candidate_hold_count++;
-        }
-        else
-        {
-          pending_candidate_tx = best_candidate_tx;
-          candidate_hold_count = 1;
-        }
-  
-        // Execute dynamic mode reconfiguration when target stability criteria is met
-        if (candidate_hold_count >= HAND_CH101_SWITCH_STABILITY_HOLD_CYCLE)
-        {
-          ESP_LOGW(TAG, "DYNAMIC MODE SWITCH: Changing Primary Tx from Port %d to Port %d (Score Gain: %.1f)", 
-                   current_tx_dev, best_candidate_tx, max_score - current_tx_score);
-  
-          // Reconfigure CH101 modes dynamically
-          for (uint8_t dev = 0; dev < num_ports; dev++)
+          metric->iq_noise_power_median_lsb2 = _hand_ch101_median_noise_filter(
+              iq_data.iq_data[dev_num].iq_data,
+              first_noise_sample,
+              (uint16_t)num_samples,
+              noise_power_scratch);
+      
+          if (!isfinite(metric->iq_noise_power_median_lsb2) || (metric->iq_noise_power_median_lsb2 < 1.0f))
           {
-            ch_dev_t* dev_ptr = ch_get_dev_ptr(grp_ptr, dev);
-            if (!ch_sensor_is_connected(dev_ptr)) continue;
-  
-            if (dev == best_candidate_tx)
+            metric->iq_noise_power_median_lsb2 = 1.0f;
+          }
+      
+          if (metric->has_valid_dsp_range && 
+              (metric->measured_path_mm >= HAND_CH101_MIN_CONTROL_RANGE_MM) && 
+              (metric->dsp_echo_amplitude_lsb > 0.0f))
+          {
+            const float target_power_lsb2 = metric->dsp_echo_amplitude_lsb * metric->dsp_echo_amplitude_lsb;
+            metric->echo_signal_power_lsb2 = fmaxf(target_power_lsb2 - metric->iq_noise_power_median_lsb2, 0.0f);
+            metric->echo_snr_linear = metric->echo_signal_power_lsb2 / metric->iq_noise_power_median_lsb2;
+            
+            if (metric->echo_snr_linear > 0.0f)
             {
-              ch_set_mode(dev_ptr, CH_MODE_TRIGGERED_TX_RX);
+              metric->echo_snr_db = 10.0f * log10f(metric->echo_snr_linear);
             }
             else
             {
-              ch_set_mode(dev_ptr, CH_MODE_TRIGGERED_RX_ONLY);
+              metric->echo_snr_db = -INFINITY;
             }
+      
+            metric->snr_reliability_score = metric->echo_signal_power_lsb2 / (metric->echo_signal_power_lsb2 + metric->iq_noise_power_median_lsb2);
           }
-  
-          // Update active tracker and global dev reference
-          current_tx_dev = best_candidate_tx;
-          hand_global_ch101_active_dev_num = current_tx_dev;
-          candidate_hold_count = 0;
         }
       }
-      else
+    }      
+  }
+
+  /* Integrated State Machine: Initial Scan vs Tracking Mode */
+  if (g_ch101_state == HAND_CH101_STATE_INITIAL_SCAN) 
+  {
+    bool target_detected = false;
+
+    for (uint8_t dev = 0U; dev < num_ports; ++dev) 
+    {
+      if (quality[dev].has_valid_dsp_range) 
       {
-        candidate_hold_count = 0;
+        target_detected = true;
+        break;
+      }
+    }
+
+    if (target_detected) 
+    {
+      ESP_LOGI(TAG, "Initial target acquired! Lock-in tracking mode.");
+      g_ch101_state = HAND_CH101_STATE_TRACKING;
+    } 
+    else 
+    {
+      /* Inline round-robin scan logic */
+      uint8_t target_tx = HAND_CH101_INVALID_DEV;
+
+      for (uint8_t i = 0; i < num_ports; ++i) 
+      {
+        uint8_t candidate = (g_scan_dev_index + i) % num_ports;
+        if (_hand_ch101_is_control_eligible(candidate))
+        { 
+          ch_dev_t* dev_ptr = ch_get_dev_ptr(grp_ptr, candidate);
+          if ((dev_ptr != NULL) && ch_sensor_is_connected(dev_ptr))
+          {
+            target_tx = candidate;
+            g_scan_dev_index = (candidate + 1) % num_ports;
+            break;
+          }
+        }
+      }
+
+      for (uint8_t dev = 0U; dev < num_ports; ++dev) 
+      {
+        ch_dev_t* dev_ptr = ch_get_dev_ptr(grp_ptr, dev);
+        if ((dev_ptr != NULL) && ch_sensor_is_connected(dev_ptr)) 
+        {
+          if (dev == target_tx) 
+          {
+            ch_set_mode(dev_ptr, CH_MODE_TRIGGERED_TX_RX);
+          } 
+          else 
+          {
+            ch_set_mode(dev_ptr, CH_MODE_TRIGGERED_RX_ONLY);
+          }
+        }
+      }
+
+      /* Push collected frame data to queue during initial scan and exit early */
+      xQueueSend(hand_global_ch101_simple_data_queue, &simple_data, pdMS_TO_TICKS(HAND_MS_CH101_QUEUE_MAX_DELAY));
+      xQueueSend(hand_global_ch101_amp_data_queue, &amp_data, pdMS_TO_TICKS(HAND_MS_CH101_QUEUE_MAX_DELAY));
+      xQueueSend(hand_global_ch101_iq_data_queue, &iq_data, pdMS_TO_TICKS(HAND_MS_CH101_QUEUE_MAX_DELAY));
+      return;
+    }
+  }
+
+  /* Tracking Mode Logic */
+  if ((tx_count == 1U) && (actual_tx_dev < num_ports))
+  {
+    hand_ch101_current_tx_dev = actual_tx_dev;
+  }
+
+  const bool tx_range_available = (tx_count == 1U) &&
+                                  (actual_tx_dev < num_ports) &&
+                                  quality[actual_tx_dev].is_control_eligible &&
+                                  quality[actual_tx_dev].has_valid_dsp_range &&
+                                  (quality[actual_tx_dev].measured_path_mm >= HAND_CH101_MIN_CONTROL_RANGE_MM);
+
+  float tx_target_range_mm = tx_range_available ? quality[actual_tx_dev].measured_path_mm : NAN;
+  float maximum_handoff_comparison_value = 0.0f;
+
+  for (uint8_t dev = 0U; dev < num_ports; ++dev)
+  {
+    hand_ch101_range_quality_t* const metric = &quality[dev];
+    if (!metric->is_control_eligible ||
+        !metric->has_valid_dsp_range ||
+        !metric->has_current_iq_trace ||
+        (metric->measured_path_mm < HAND_CH101_MIN_CONTROL_RANGE_MM) ||
+        (metric->dsp_echo_amplitude_lsb <= 0.0f))
+    {
+      continue;
+    }
+
+    if (tx_range_available)
+    {
+      if ((dev == actual_tx_dev) && (metric->operating_mode == CH_MODE_TRIGGERED_TX_RX))
+      {
+        metric->handoff_comparison_value = metric->dsp_echo_amplitude_lsb * tx_target_range_mm * tx_target_range_mm;
+        metric->has_valid_handoff_metric = true;
+        metric->handoff_metric_is_spreading_compensated = true;
+      }
+      else if (metric->operating_mode == CH_MODE_TRIGGERED_RX_ONLY)
+      {
+        const float target_to_receiver_mm = metric->measured_path_mm - tx_target_range_mm;
+        if (target_to_receiver_mm > 0.0f)
+        {
+          metric->handoff_comparison_value = metric->dsp_echo_amplitude_lsb * tx_target_range_mm * target_to_receiver_mm;
+          metric->has_valid_handoff_metric = true;
+          metric->handoff_metric_is_spreading_compensated = true;
+        }
       }
     }
     else
     {
-      candidate_hold_count = 0;
+      metric->handoff_comparison_value = metric->dsp_echo_amplitude_lsb;
+      metric->has_valid_handoff_metric = true;
+      metric->handoff_metric_is_spreading_compensated = false;
+    }
+
+    if (metric->has_valid_handoff_metric && (metric->handoff_comparison_value > maximum_handoff_comparison_value))
+    {
+      maximum_handoff_comparison_value = metric->handoff_comparison_value;
     }
   }
-  
-  
+
+  const float empirical_fov_amplitude_ratio = powf(10.0f, HAND_CH101_EMPIRICAL_FOV_CONTOUR_DB / 20.0f);
+
+  for (uint8_t dev = 0U; dev < num_ports; ++dev)
+  {
+    hand_ch101_range_quality_t* const metric = &quality[dev];
+    if (metric->has_valid_handoff_metric && (maximum_handoff_comparison_value > 0.0f))
+    {
+      const float relative_amplitude = _hand_ch101_clampf(metric->handoff_comparison_value / maximum_handoff_comparison_value, 0.0f, 1.0f);
+
+      if (relative_amplitude > 0.0f)
+      {
+        metric->relative_handoff_level_db = 20.0f * log10f(relative_amplitude);
+      }
+      else
+      {
+        metric->relative_handoff_level_db = -INFINITY;
+      }
+
+      metric->relative_handoff_reliability_score = _hand_ch101_clampf(relative_amplitude / empirical_fov_amplitude_ratio, 0.0f, 1.0f);
+    }
+
+    metric->combined_range_quality_score = _hand_ch101_clampf(metric->snr_reliability_score * metric->relative_handoff_reliability_score, 0.0f, 1.0f);
+  }
+
+  /* Select best transmitter candidate */
+  uint8_t best_candidate = HAND_CH101_INVALID_DEV;
+  float best_quality = -1.0f;
+  for (uint8_t dev = 0U; dev < num_ports; ++dev)
+  {
+    const hand_ch101_range_quality_t* const metric = &quality[dev];
+    if (!metric->is_control_eligible ||
+        !metric->has_valid_dsp_range ||
+        !metric->has_current_iq_trace ||
+        !metric->has_valid_handoff_metric ||
+        (metric->relative_handoff_level_db < HAND_CH101_EMPIRICAL_FOV_CONTOUR_DB) ||
+        (metric->combined_range_quality_score <= 0.0f))
+    {
+      continue;
+    }
+
+    if (metric->combined_range_quality_score > best_quality)
+    {
+      best_quality = metric->combined_range_quality_score;
+      best_candidate = dev;
+    }
+  }
+
+  /* TX switch decision */
+  uint8_t target_tx_to_switch = HAND_CH101_INVALID_DEV;
+  bool should_reset_pending = false;
+
+  if (tx_count != 1U)
+  {
+    uint8_t repair_candidate = best_candidate;
+    if (repair_candidate == HAND_CH101_INVALID_DEV)
+    {
+      for (uint8_t dev = 0U; dev < num_ports; ++dev)
+      {
+        ch_dev_t* const dev_ptr = ch_get_dev_ptr(grp_ptr, dev);
+        if (_hand_ch101_is_control_eligible(dev) && (dev_ptr != NULL) && ch_sensor_is_connected(dev_ptr))
+        {
+          repair_candidate = dev;
+          break;
+        }
+      }
+    }
+
+    ESP_LOGE(TAG, "CH101 mode invariant violated: %u TX/RX devices", (unsigned int)tx_count);
+    if (repair_candidate != HAND_CH101_INVALID_DEV)
+    {
+      target_tx_to_switch = repair_candidate;
+    }
+    should_reset_pending = true;
+  }
+  else if ((best_candidate != HAND_CH101_INVALID_DEV) && (best_candidate != actual_tx_dev))
+  {
+    const hand_ch101_range_quality_t* const current = &quality[actual_tx_dev];
+
+    const bool current_is_usable = current->is_control_eligible &&
+                                   current->has_valid_dsp_range &&
+                                   current->has_current_iq_trace &&
+                                   current->has_valid_handoff_metric &&
+                                   (current->combined_range_quality_score > 0.0f);
+
+    const bool current_is_below_empirical_contour = !current_is_usable ||
+                                                    (current->relative_handoff_level_db < HAND_CH101_EMPIRICAL_FOV_CONTOUR_DB);
+
+    const bool candidate_is_better = best_quality > (current->combined_range_quality_score + HAND_CH101_SWITCH_QUALITY_MARGIN);
+
+    if (current_is_below_empirical_contour && candidate_is_better)
+    {
+      if (hand_ch101_pending_tx_dev == best_candidate)
+      {
+        if (hand_ch101_pending_tx_count < UINT8_MAX)
+        {
+          ++hand_ch101_pending_tx_count;
+        }
+      }
+      else
+      {
+        hand_ch101_pending_tx_dev = best_candidate;
+        hand_ch101_pending_tx_count = 1U;
+      }
+
+      if (hand_ch101_pending_tx_count >= HAND_CH101_SWITCH_HOLD_CYCLES)
+      {
+        target_tx_to_switch = best_candidate;
+        should_reset_pending = true;
+      }
+    }
+    else
+    {
+      should_reset_pending = true;
+    }
+  }
+  else
+  {
+    should_reset_pending = true;
+  }
+
+  /* Execute transactional TX switch */
+  if (target_tx_to_switch != HAND_CH101_INVALID_DEV)
+  {
+    const uint8_t next_tx_dev = target_tx_to_switch;
+    bool switch_success = false;
+
+    if ((next_tx_dev < num_ports) && _hand_ch101_is_control_eligible(next_tx_dev))
+    {
+      ch_dev_t* const next_tx_ptr = ch_get_dev_ptr(grp_ptr, next_tx_dev);
+      if ((next_tx_ptr != NULL) && ch_sensor_is_connected(next_tx_ptr))
+      {
+        ch_mode_t previous_modes[HAND_DEV_MAX_NUM_CH101] = {CH_MODE_IDLE};
+        bool connected[HAND_DEV_MAX_NUM_CH101] = {false};
+        bool failed = false;
+
+        for (uint8_t dev = 0U; dev < num_ports; ++dev)
+        {
+          ch_dev_t* const dev_ptr = ch_get_dev_ptr(grp_ptr, dev);
+          connected[dev] = (dev_ptr != NULL) && ch_sensor_is_connected(dev_ptr);
+          if (connected[dev]) previous_modes[dev] = ch_get_mode(dev_ptr);
+        }
+
+        for (uint8_t dev = 0U; dev < num_ports; ++dev)
+        {
+          if (!connected[dev] || (dev == next_tx_dev)) continue;
+          ch_dev_t* const dev_ptr = ch_get_dev_ptr(grp_ptr, dev);
+          if ((ch_get_mode(dev_ptr) != CH_MODE_TRIGGERED_RX_ONLY) &&
+              (ch_set_mode(dev_ptr, CH_MODE_TRIGGERED_RX_ONLY) != RET_OK))
+          {
+            failed = true;
+            break;
+          }
+        }
+
+        if (!failed &&
+            (ch_get_mode(next_tx_ptr) != CH_MODE_TRIGGERED_TX_RX) &&
+            (ch_set_mode(next_tx_ptr, CH_MODE_TRIGGERED_TX_RX) != RET_OK))
+        {
+          failed = true;
+        }
+
+        if (failed)
+        {
+          for (uint8_t dev = 0U; dev < num_ports; ++dev)
+          {
+            if (!connected[dev]) continue;
+            ch_dev_t* const dev_ptr = ch_get_dev_ptr(grp_ptr, dev);
+            ch_set_mode(dev_ptr, previous_modes[dev]);
+          }
+        }
+        else
+        {
+          switch_success = true;
+        }
+      }
+    }
+
+    if (switch_success)
+    {
+      hand_ch101_current_tx_dev = next_tx_dev;
+    }
+  }
+
+  if (should_reset_pending)
+  {
+    hand_ch101_pending_tx_dev = HAND_CH101_INVALID_DEV;
+    hand_ch101_pending_tx_count = 0U;
+  }
+
+
   ESP_LOGI(TAG, "range: %.3f, %.3f, %.3f, %.3f", simple_data.simple_data[0].range,
   simple_data.simple_data[1].range, simple_data.simple_data[2].range,
   simple_data.simple_data[3].range);
@@ -644,6 +988,7 @@ static void _hand_ch101_handle_data_ready(ch_group_t* grp_ptr)
   xQueueSend(hand_global_ch101_iq_data_queue, &iq_data,
     pdMS_TO_TICKS(HAND_MS_CH101_QUEUE_MAX_DELAY));
 }
+
 
 void hand_task_ch101_collect_data(void* __attribute__((unused)) arg)
 { 
@@ -671,8 +1016,6 @@ void hand_task_ch101_collect_data(void* __attribute__((unused)) arg)
     _hand_ch101_handle_data_ready(&hand_global_devs_handle.ch101_group);                           
   }
 }
-
-
 
 void hand_task_ch101_from_queue_to_ppb(void* __attribute__((unused)) arg)
 {
