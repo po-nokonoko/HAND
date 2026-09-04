@@ -102,10 +102,10 @@
 #define HAND_MS_CH101_QUEUE_MAX_DELAY (100)
 /* XXX: I don't know why but this value will be doubled at somewhere? */
 // Trying to figure...
-#define HAND_MS_CH101_DEFAULT_MEASURE_PERIOD (100)
-#define HAND_MS_CH101_SEND_SIMPLE_DATA       (100) 
-#define HAND_MS_CH101_SEND_AMP_DATA          (100) 
-#define HAND_MS_CH101_SEND_IQ_DATA           (100) 
+#define HAND_MS_CH101_DEFAULT_MEASURE_PERIOD (50)
+#define HAND_MS_CH101_SEND_SIMPLE_DATA       (20) 
+#define HAND_MS_CH101_SEND_AMP_DATA          (20) 
+#define HAND_MS_CH101_SEND_IQ_DATA           (20) 
 
 #define HAND_CH101_CONTROL_DEV_MASK (0x0DU)
 
@@ -140,8 +140,8 @@
 
 /* Conservative project-specific lower bound used only for scoring/control.
  * This is not declared to be the universal CH101 ring-down distance. */
-#define HAND_CH101_NOISE_ESTIMATOR_START_MM (150U)
-#define HAND_CH101_MIN_CONTROL_RANGE_MM      (150.0f)
+#define HAND_CH101_NOISE_ESTIMATOR_START_MM (100U)
+#define HAND_CH101_MIN_CONTROL_RANGE_MM      (100.0f)
 
 /* Numerical guard for a robust median estimate. This is a controller setting,
  * not a CH101 physical constant. */

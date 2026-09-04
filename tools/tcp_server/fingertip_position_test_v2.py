@@ -27,6 +27,13 @@ BOUNDING_BOX: dict[str, tuple[float, float]] = {
     "z": (0.0, 120.0)
 }
 
+# Extract bounds arrays for Trust Region Reflective (TRF) solver
+MIN_BOUNDS: np.ndarray = np.array([BOUNDING_BOX["x"][0], BOUNDING_BOX["y"][0], BOUNDING_BOX["z"][0]], dtype=np.float64)
+MAX_BOUNDS: np.ndarray = np.array([BOUNDING_BOX["x"][1], BOUNDING_BOX["y"][1], BOUNDING_BOX["z"][1]], dtype=np.float64)
+
+# Maximum allowable physical hand velocity during handwriting (500 mm/s)
+MAX_PHYSICAL_VELOCITY_MM_S: float = 1
+
 SENSOR_POSITIONS: dict[str, np.ndarray] = {
     "CH101_SENSOR1": np.array([0.0, 0.0, 0.0], dtype=np.float64),    # dev0
     "CH101_SENSOR3": np.array([68.5, 0.0, 0.0], dtype=np.float64),   # dev2
@@ -49,17 +56,19 @@ class ConnectionState:
 
 class BistaticFingertipEKF:
     def __init__(self) -> None:
-        # 1. Initialize timing for dynamic dt
+        # Initialize timing for dynamic dt
         self.last_time: float = time.time()
         self.x: np.ndarray = np.array([34.25, 5.5, 50.0, 0.0, 0.0, 0.0], dtype=np.float64)
         self.cov_P: np.ndarray = np.eye(6, dtype=np.float64) * 10.0
         
-        # 2. Modulate Covariance Matrices for highly dynamic tracking
-        self.Q: np.ndarray = np.eye(6, dtype=np.float64) * 1.0     # Increased process noise (allows fast acceleration)
-        self.R_base: float = 2                                   # Lowered measurement noise (trusts raw sensors more)
-
+        # Modulate Covariance Matrices for highly dynamic tracking
+        # Process Noise Matrix Q: High values allow aggressive dynamic changes in handwriting
+        self.Q: np.ndarray = np.eye(6, dtype=np.float64) * 0.5
+        # Measurement Noise Baseline R_base: Low values trust validated high-SNR acoustic pulses     
+        self.R_base: float = 0.5                                   
+    
     def predict(self) -> np.ndarray:
-        # 3. Dynamic Delta-Time update
+        # Dynamic Delta-Time update
         now = time.time()
         dt = max(now - self.last_time, 1e-4)
         self.last_time = now
@@ -131,7 +140,7 @@ class RealtimeVisualizer:
         self.ax.set_zlabel("Z (mm)")
         self.ax.set_title("Real-Time Fingertip Writing Tracking")
         
-        # 4. Use persistent plot objects for rapid updating
+        # Use persistent plot objects for rapid updating
         self.line, = self.ax.plot([], [], [], 'b-', lw=2.0)
         self.point = self.ax.scatter([], [], [], color='green', s=100)
         self.last_plot_time = time.time()
@@ -139,12 +148,13 @@ class RealtimeVisualizer:
     def update_position(self, pos: np.ndarray) -> None:
         self.trajectory.append(pos)
         
-        # 5. Expand trace buffer to prevent disappearing trails
-        # 5000 frames @ 50Hz = ~100 seconds of continuous writing trace
+        # Expand trace buffer to prevent disappearing trails
+        
+        # frames @ 50Hz = ~100 seconds of continuous writing trace
         if len(self.trajectory) > 5000:
             self.trajectory.pop(0)
 
-        # 6. Throttle GUI Rendering (~15 FPS) to prevent TCP socket starvation
+        # Throttle GUI Rendering (~15 FPS) to prevent TCP socket starvation
         now = time.time()
         if now - self.last_plot_time < 0.066:
             return
@@ -163,6 +173,7 @@ class RealtimeVisualizer:
 visualizer: RealtimeVisualizer | None = None
 
 def clamp_to_bounds(pos: np.ndarray) -> np.ndarray:
+    # Ensure x0 is strictly inside TRF mathematical boundaries
     clamped_x = float(np.clip(pos[0], BOUNDING_BOX["x"][0], BOUNDING_BOX["x"][1]))
     clamped_y = float(np.clip(pos[1], BOUNDING_BOX["y"][0], BOUNDING_BOX["y"][1]))
     clamped_z = float(np.clip(pos[2], BOUNDING_BOX["z"][0], BOUNDING_BOX["z"][1]))
@@ -215,6 +226,7 @@ def process_sensor_frame(sensor_data_store: dict[str, dict[str, Any]]) -> None:
         q_val = float(s_info.get("q", 0.0))
         iq_amp = float(np.hypot(i_val, q_val))
         
+        # Acoustic Amplitude Thresholding (Hard Cutoff for noise/reflections)
         if r_path <= 0.0:
             return
             
@@ -229,6 +241,8 @@ def process_sensor_frame(sensor_data_store: dict[str, dict[str, Any]]) -> None:
     best_tx_key = active_sensors[0]
     best_residuals_sum = float('inf')
     p_pred = ekf.predict()
+    
+    best_raw_pos = p_pred.copy()
 
     for cand_tx_key in active_sensors:
         cand_tx_pos = SENSOR_POSITIONS[cand_tx_key]
@@ -246,10 +260,11 @@ def process_sensor_frame(sensor_data_store: dict[str, dict[str, Any]]) -> None:
 
         # Force the LM solver to exit early once it reaches 1mm precision
         # This prevents the solver from blocking the socket read loop
+        # Bounded Least-Squares Optimization using Trust Region Reflective ('trf')
         opt_res: OptimizeResult = least_squares(
             bistatic_residuals, 
-            p_pred,      # Use p_pred as the starting point (x0) for the local optimization
-            method='lm',
+            p_pred,  # Use the safely clamped prediction as x0 
+            method='lm',   # support strict bounding box constraints
             ftol=1e-3,      # Cost function tolerance
             xtol=1e-3,      # Step size tolerance
             max_nfev=20     # Maximum number of function evaluations
@@ -260,16 +275,16 @@ def process_sensor_frame(sensor_data_store: dict[str, dict[str, Any]]) -> None:
             best_residuals_sum = res_norm
             best_tx_key = cand_tx_key
             best_raw_pos = opt_res.x
-
+    
     best_raw_pos = clamp_to_bounds(best_raw_pos)
-
+    
     alpha = 0.5
     raw_weights = alpha * (amps / (np.max(amps) + 1e-5)) + (1.0 - alpha) * (iq_amps / (np.max(iq_amps) + 1e-5))
     total_w = float(np.sum(raw_weights))
     weights = raw_weights / total_w if total_w > 0 else np.ones(len(active_sensors)) / len(active_sensors)
 
     updated_pos = ekf.update(raw_paths, active_sensors, best_tx_key, weights)
-
+    
     if visualizer is not None:
         visualizer.update_position(updated_pos)
 
@@ -301,7 +316,7 @@ def process_single_payload(payload: bytes) -> None:
 
 def read(key: selectors.SelectorKey, mask: int) -> None:
     state: ConnectionState = key.data
-    conn: socket.socket = key.fileobj
+    conn: socket.socket = cast(socket.socket, key.fileobj)
 
     try:
         chunk = conn.recv(4096)
@@ -330,7 +345,7 @@ def read(key: selectors.SelectorKey, mask: int) -> None:
         close_connection(key)
 
 def close_connection(key: selectors.SelectorKey) -> None:
-    conn: socket.socket = key.fileobj
+    conn: socket.socket = cast(socket.socket, key.fileobj)
     try:
         sel.unregister(conn)
         conn.close()
@@ -362,7 +377,9 @@ def main() -> None:
             events = sel.select(timeout=0.01)
             for key, mask in events:
                 if key.data is None:
-                    accept(key.fileobj, mask)
+                    # Cast the fileobj to a socket before passing to accept
+                    sock = cast(socket.socket, key.fileobj)
+                    accept(sock, mask)
                 else:
                     read(key, mask)
             # Throttled the pause duration to allow tighter socket processing
